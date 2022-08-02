@@ -71,7 +71,6 @@ class DoctorTest(DoctorTestBase):
         self, mock_get_roots_for_nuclide, mock_watchman
     ):
         side_effects: List[Dict[str, Any]] = []
-        calls = []
         instance = FakeEdenInstance(self.make_temporary_directory())
 
         # In edenfs_path1, we will break the snapshot check.
@@ -101,7 +100,7 @@ class DoctorTest(DoctorTestBase):
             edenfs_path3,
         }
 
-        calls.append(call(["watch-list"]))
+        calls = [call(["watch-list"])]
         side_effects.append({"roots": [edenfs_path1, edenfs_path2, edenfs_path3]})
 
         calls.append(call(["watch-project", edenfs_path1]))
@@ -206,9 +205,8 @@ https://fb.facebook.com/groups/eden.users/
             instance.create_test_mount("eden-mount-not-watched", scm_type="git").path
         )
         side_effects: List[Dict[str, Any]] = []
-        calls = []
+        calls = [call(["watch-list"])]
 
-        calls.append(call(["watch-list"]))
         side_effects.append({"roots": [edenfs_path]})
         calls.append(call(["watch-project", edenfs_path]))
         side_effects.append({"watcher": "eden"})
@@ -440,9 +438,8 @@ https://fb.facebook.com/groups/eden.users/
     ) -> Tuple[doctor.ProblemFixer, str]:
         edenfs_path = "/path/to/eden-mount"
         side_effects: List[Dict[str, Any]] = []
-        calls = []
+        calls = [call(["watch-project", edenfs_path])]
 
-        calls.append(call(["watch-project", edenfs_path]))
         side_effects.append({"watch": edenfs_path, "watcher": initial_watcher})
 
         if initial_watcher != "eden" and not dry_run:
@@ -658,9 +655,7 @@ Repairing hg directory contents for {checkout.path}...<green>fixed<reset>
 
     def test_snapshot_and_dirstate_file_differ_and_snapshot_invalid(self):
         def check_commit_validity(commit: str) -> bool:
-            if commit == "12345678" * 5:
-                return False
-            return True
+            return commit != "12345678" * 5
 
         dirstate_hash_hex = "12000000" * 5
         snapshot_hex = "12345678" * 5
@@ -700,9 +695,7 @@ Repairing hg directory contents for {checkout.path}...<green>fixed<reset>
     ):
         def check_commit_validity(commit: str) -> bool:
             null_commit = "00000000" * 5
-            if commit == null_commit:
-                return True
-            return False
+            return commit == null_commit
 
         dirstate_hash_hex = "12000000" * 5
         snapshot_hex = "12345678" * 5
@@ -787,9 +780,7 @@ Repairing hg directory contents for {checkout.path}...<green>fixed<reset>
 
     def test_snapshot_and_dirstate_file_differ_and_dirstate_commit_hash_invalid(self):
         def check_commit_validity(commit: str) -> bool:
-            if commit == "12000000" * 5:
-                return False
-            return True
+            return commit != "12000000" * 5
 
         dirstate_hash_hex = "12000000" * 5
         snapshot_hex = "12345678" * 5
@@ -877,8 +868,7 @@ which may have important bug fixes or performance improvements.
         self, mock_rpm_q, rpm_value: str
     ) -> Tuple[doctor.ProblemFixer, str]:
         side_effects: List[str] = []
-        calls = []
-        calls.append(call())
+        calls = [call()]
         side_effects.append(rpm_value)
         mock_rpm_q.side_effect = side_effects
 
@@ -1003,10 +993,8 @@ Would remount {mounts[1]}
         tmp_dir = self.make_temporary_directory()
         instance = FakeEdenInstance(tmp_dir)
 
-        mounts = []
         mount1 = instance.create_test_mount("path1")
-        mounts.append(mount1.path)
-        mounts.append(instance.create_test_mount("path2", active=False).path)
+        mounts = [mount1.path, instance.create_test_mount("path2", active=False).path]
         if old_edenfs:
             # Mimic older versions of edenfs, and do not return mount state data.
             instance.get_thrift_client_legacy().change_mount_state(mount1.path, None)
@@ -1194,33 +1182,34 @@ def _create_watchman_subscription(
 ) -> Dict:
     if filewatcher_subscriptions is None:
         filewatcher_subscriptions = []
-    subscribers = []
-    for filewatcher_subscription in filewatcher_subscriptions:
-        subscribers.append(
+    subscribers = [
+        {
+            "info": {
+                "name": filewatcher_subscription,
+                "query": {
+                    "empty_on_fresh_instance": True,
+                    "defer_vcs": False,
+                    "fields": ["name", "new", "exists", "mode"],
+                    "relative_root": "fbcode",
+                    "since": "c:1511985586:2749065:2774073346:354",
+                },
+            }
+        }
+        for filewatcher_subscription in filewatcher_subscriptions
+    ]
+
+    if include_hg_subscriptions:
+        subscribers.extend(
             {
                 "info": {
-                    "name": filewatcher_subscription,
+                    "name": name,
                     "query": {
                         "empty_on_fresh_instance": True,
-                        "defer_vcs": False,
                         "fields": ["name", "new", "exists", "mode"],
-                        "relative_root": "fbcode",
-                        "since": "c:1511985586:2749065:2774073346:354",
                     },
                 }
             }
+            for name in check_watchman.NUCLIDE_HG_SUBSCRIPTIONS
         )
-    if include_hg_subscriptions:
-        for name in check_watchman.NUCLIDE_HG_SUBSCRIPTIONS:
-            subscribers.append(
-                {
-                    "info": {
-                        "name": name,
-                        "query": {
-                            "empty_on_fresh_instance": True,
-                            "fields": ["name", "new", "exists", "mode"],
-                        },
-                    }
-                }
-            )
+
     return {"subscribers": subscribers}

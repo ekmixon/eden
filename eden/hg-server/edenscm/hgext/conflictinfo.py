@@ -107,10 +107,10 @@ def extsetup(ui):
 # states are mutually exclusive, we can use the existence of any one statefile
 # as proof of culpability.
 def _findconflictcommand(repo):
-    for path, data in CONFLICTSTATES:
-        if repo.localvfs.exists(path):
-            return data
-    return None
+    return next(
+        (data for path, data in CONFLICTSTATES if repo.localvfs.exists(path)),
+        None,
+    )
 
 
 # To become a block in commands.py/resolve().

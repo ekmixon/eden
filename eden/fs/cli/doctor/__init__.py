@@ -168,8 +168,7 @@ class EdenDoctorChecker:
             self.tracker.add_problem(EdenfsUnexpectedStatus(status))
 
     def check_working_directory(self) -> None:
-        problem = check_for_working_directory_problem()
-        if problem:
+        if problem := check_for_working_directory_problem():
             self.tracker.add_problem(problem)
 
     def run_edenfs_not_healthy_checks(self) -> None:
@@ -212,7 +211,7 @@ class EdenDoctorChecker:
 
         # Get information about the checkouts listed in the config file
         for configured_checkout in self.instance.get_checkouts():
-            checkout_info = checkouts.get(configured_checkout.path, None)
+            checkout_info = checkouts.get(configured_checkout.path)
             if checkout_info is None:
                 checkout_info = CheckoutInfo(self.instance, configured_checkout.path)
                 checkout_info.configured_state_dir = configured_checkout.state_dir
@@ -287,11 +286,7 @@ class EdenDoctor(EdenDoctorChecker):
     ) -> None:
         self.dry_run = dry_run
         out = out if out is not None else ui.get_output()
-        if dry_run:
-            self.fixer = DryRunFixer(out)
-        else:
-            self.fixer = ProblemFixer(out)
-
+        self.fixer = DryRunFixer(out) if dry_run else ProblemFixer(out)
         super().__init__(
             instance,
             tracker=self.fixer,
@@ -325,9 +320,7 @@ class EdenDoctor(EdenDoctorChecker):
             return 0
 
         def problem_count(num: int) -> str:
-            if num == 1:
-                return "1 problem"
-            return f"{num} problems"
+            return "1 problem" if num == 1 else f"{num} problems"
 
         if self.dry_run:
             out.writeln(

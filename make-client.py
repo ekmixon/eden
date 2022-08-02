@@ -42,11 +42,20 @@ def run_cmd(cmd, env=None, cwd=None):
     env_extra = env or {}
     env = os.environ.copy()
     print(
-        "+ "
-        + " ".join(["%s=%s" % (k, shellquote(v)) for k, v in env_extra.items()])
-        + " "
-        + cmd_str
+        (
+            (
+                (
+                    "+ "
+                    + " ".join(
+                        [f"{k}={shellquote(v)}" for k, v in env_extra.items()]
+                    )
+                )
+                + " "
+            )
+            + cmd_str
+        )
     )
+
     assert os.path.isfile(cmd[0]), cmd[0]
     env.update(env_extra)
     subprocess.check_call(cmd, env=env, cwd=cwd)
@@ -100,9 +109,7 @@ def find_site_packages(instdir):
     """locate any and all site-packages directories in the install image"""
     sp = []
     for root, dirs, _files in os.walk(instdir):
-        for d in dirs:
-            if d == "site-packages":
-                sp.append(os.path.join(root, d))
+        sp.extend(os.path.join(root, d) for d in dirs if d == "site-packages")
     return sp
 
 

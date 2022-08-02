@@ -86,9 +86,7 @@ class ErrorLevel(enum.IntEnum):
 
     @staticmethod
     def get_label(level: int) -> str:
-        if level == ErrorLevel.WARNING:
-            return "warning"
-        return "error"
+        return "warning" if level == ErrorLevel.WARNING else "error"
 
 
 class Error:
@@ -170,10 +168,7 @@ class InvalidMaterializedInode(Error):
         # Look at the parents to see if this looks like it should be a file or directory
         if self.inode.parents:
             _parent_inode, child_entry = self.inode.parents[0]
-            if stat.S_ISDIR(child_entry.mode):
-                return InodeType.DIR
-            else:
-                return InodeType.FILE
+            return InodeType.DIR if stat.S_ISDIR(child_entry.mode) else InodeType.FILE
         elif self.inode.type == InodeType.DIR_ERROR:
             return InodeType.DIR
         return None
@@ -313,7 +308,7 @@ class MissingNextInodeNumber(Error):
         # Eden deletes the next-inode-number while the checkout is mounted,
         # so if it is missing it just means that the checkout wasn't cleanly unmounted.
         # This is pretty common in situations where the user is running fsck...
-        return f"edenfs appears to have been shut down uncleanly"
+        return "edenfs appears to have been shut down uncleanly"
 
     def repair(
         self, log: logging.Logger, overlay: overlay_mod.Overlay, fsck_dir: Path
@@ -396,10 +391,10 @@ class FilesystemChecker:
         inodes = self._read_inodes()
 
         print(f"Found {len(inodes)} materialized inodes")
-        print(f"Computing directory relationships...")
+        print("Computing directory relationships...")
         self._link_inode_children(inodes)
 
-        print(f"Scanning for inconsistencies...")
+        print("Scanning for inconsistencies...")
         self._scan_inodes_for_errors(inodes)
 
         if self._orphan_inodes:
@@ -411,11 +406,6 @@ class FilesystemChecker:
             if read_next_inode_number is None:
                 if self._overlay_locked:
                     self._add_error(MissingNextInodeNumber(expected_next_inode_number))
-                else:
-                    # If we couldn't get the overlay lock then Eden is probably still
-                    # running, so it's normal that the max inode number file does not
-                    # exist.
-                    pass
             elif read_next_inode_number < expected_next_inode_number:
                 self._add_error(
                     BadNextInodeNumber(
@@ -462,7 +452,7 @@ class FilesystemChecker:
                     # Newer versions of edenfs always allocate an inode number for all
                     # children, even if they haven't been loaded yet.
                     continue
-                child_inode = inodes.get(child_info.inode_number, None)
+                child_inode = inodes.get(child_info.inode_number)
                 if child_inode is None:
                     if child_info.hash is None:
                         # This child is materialized (since it doesn't have a hash
@@ -535,9 +525,7 @@ class FilesystemChecker:
                     )
                 )
 
-        mtime = None
-        if stat_info is not None:
-            mtime = stat_info.st_mtime
+        mtime = stat_info.st_mtime if stat_info is not None else None
         return InodeInfo(inode_number, type, children, mtime, error)
 
     def fix_errors(self, fsck_dir: Optional[Path] = None) -> Optional[Path]:
@@ -604,16 +592,13 @@ class FilesystemChecker:
 
     def _fix_error(self, fsck_dir: Path, log: logging.Logger, error: Error) -> bool:
         log.info(f"Processing error: {error}")
-        detail = error.detailed_description()
-        if detail:
+        if detail := error.detailed_description():
             log.debug(detail)
         return error.repair(log=log, overlay=self.overlay, fsck_dir=fsck_dir)
 
 
 def _get_mtime_str(mtime: Optional[float]) -> str:
-    if mtime is None:
-        return ""
-    return f", with mtime {time.ctime(mtime)}"
+    return "" if mtime is None else f", with mtime {time.ctime(mtime)}"
 
 
 def _create_fsck_dir(state_dir: Path) -> Path:

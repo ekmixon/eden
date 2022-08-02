@@ -56,11 +56,7 @@ def get_desc(docstr):
     shortdesc = docstr.splitlines()[0].strip()
 
     i = docstr.find("\n")
-    if i != -1:
-        desc = docstr[i + 2 :]
-    else:
-        desc = shortdesc
-
+    desc = docstr[i + 2 :] if i != -1 else shortdesc
     desc = textwrap.dedent(desc)
 
     return (shortdesc, desc)
@@ -75,13 +71,13 @@ def get_opts(opts):
             optlabel = _("VALUE")
         allopts = []
         if shortopt:
-            allopts.append("-%s" % shortopt)
+            allopts.append(f"-{shortopt}")
         if longopt:
-            allopts.append("--%s" % longopt)
+            allopts.append(f"--{longopt}")
         if isinstance(default, list):
-            allopts[-1] += " <%s[+]>" % optlabel
+            allopts[-1] += f" <{optlabel}[+]>"
         elif (default is not None) and not isinstance(default, bool):
-            allopts[-1] += " <%s>" % optlabel
+            allopts[-1] += f" <{optlabel}>"
         if "\n" in desc:
             # only remove line breaks and indentation
             desc = " ".join(l.lstrip() for l in desc.split("\n"))
@@ -90,19 +86,17 @@ def get_opts(opts):
 
 
 def get_cmd(cmd, cmdtable):
-    d = {}
     attr = cmdtable[cmd]
     cmds = cmd.lstrip("^").split("|")
 
-    d["cmd"] = cmds[0]
-    d["aliases"] = cmd.split("|")[1:]
+    d = {"cmd": cmds[0], "aliases": cmd.split("|")[1:]}
     d["desc"] = get_desc(gettext(attr[0].__doc__))
     d["opts"] = list(get_opts(attr[1]))
 
-    s = "hg " + cmds[0]
+    s = f"hg {cmds[0]}"
     if len(attr) > 2:
         if not attr[2].startswith("hg"):
-            s += " " + attr[2]
+            s += f" {attr[2]}"
         else:
             s = attr[2]
     d["synopsis"] = s.strip()
@@ -155,8 +149,7 @@ def showdoc(ui):
             continue
         ui.write(minirst.subsection(extensionname))
         ui.write("%s\n\n" % gettext(mod.__doc__))
-        cmdtable = getattr(mod, "cmdtable", None)
-        if cmdtable:
+        if cmdtable := getattr(mod, "cmdtable", None):
             ui.write(minirst.subsubsection(_("Commands")))
             commandprinter(ui, cmdtable, minirst.subsubsubsection)
 
@@ -217,17 +210,12 @@ def commandprinter(ui, cmdtable, sectionfunc):
         ui.write("\n")
         # description
         ui.write("%s\n\n" % d["desc"][1])
-        # options
-        opt_output = list(d["opts"])
-        if opt_output:
-            opts_len = max([len(line[0]) for line in opt_output])
+        if opt_output := list(d["opts"]):
+            opts_len = max(len(line[0]) for line in opt_output)
             ui.write(_("Options:\n\n"))
             multioccur = False
             for optstr, desc in opt_output:
-                if desc:
-                    s = "%-*s  %s" % (opts_len, optstr, desc)
-                else:
-                    s = optstr
+                s = "%-*s  %s" % (opts_len, optstr, desc) if desc else optstr
                 ui.write("%s\n" % s)
                 if optstr.endswith("[+]>"):
                     multioccur = True
@@ -244,10 +232,7 @@ def allextensionnames():
 
 
 if __name__ == "__main__":
-    doc = "hg.1.gendoc"
-    if len(sys.argv) > 1:
-        doc = sys.argv[1]
-
+    doc = sys.argv[1] if len(sys.argv) > 1 else "hg.1.gendoc"
     ui = uimod.ui.load()
     if doc == "hg.1.gendoc":
         showdoc(ui)

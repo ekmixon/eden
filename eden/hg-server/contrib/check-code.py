@@ -53,7 +53,7 @@ except ImportError:
 
 def compilere(pat, multiline=False):
     if multiline:
-        pat = "(?m)" + pat
+        pat = f"(?m){pat}"
     if re2:
         try:
             return re2.compile(pat)
@@ -85,9 +85,7 @@ def _repquoteencodechr(i):
         return _repquotefixedmap[c]
     if c.isalpha():
         return "x"
-    if c.isdigit():
-        return "n"
-    return "o"
+    return "n" if c.isdigit() else "o"
 
 
 _repquotett = "".join(_repquoteencodechr(i) for i in xrange(256))
@@ -100,8 +98,7 @@ def repquote(m):
 
 
 def reppython(m):
-    comment = m.group("comment")
-    if comment:
+    if comment := m.group("comment"):
         l = len(comment.rstrip())
         return "#" * l + comment[l:]
     return repquote(m)
@@ -122,7 +119,7 @@ def repcallspaces(m):
 
 
 def repinclude(m):
-    return m.group(1) + "<foo>"
+    return f"{m.group(1)}<foo>"
 
 
 def rephere(m):
@@ -197,21 +194,30 @@ uprefix = r"^  \$ "
 utestpats = [
     [
         (r"^(\S.*||  [$>] \S.*)[ \t]\n", "trailing whitespace on non-output"),
-        (uprefix + r"(true|exit 0)", "explicit zero exit unnecessary"),
+        (f"{uprefix}(true|exit 0)", "explicit zero exit unnecessary"),
         (uprefix + r".*(?<!\[)\$\?", "explicit exit code checks unnecessary"),
         (
             uprefix + r".*\|\| echo.*(fail|error)",
             "explicit exit code checks unnecessary",
         ),
-        (uprefix + r"set -e", "don't use set -e"),
+        (f"{uprefix}set -e", "don't use set -e"),
         (uprefix + r"(\s|fi\b|done\b)", "use > for continued lines"),
-        (r"^  [^$>].*27\.0\.0\.1", "use $LOCALIP not an explicit loopback address"),
+        (
+            r"^  [^$>].*27\.0\.0\.1",
+            "use $LOCALIP not an explicit loopback address",
+        ),
         (
             r"^  (?![>$] ).*\$LOCALIP.*[^)]$",
             "mark $LOCALIP output lines with (glob) to help tests in BSD jails",
         ),
-        (r"^  (cat|find): .*: \$ENOENT\$", "use test -f to test for file existence"),
-        (r"^  diff -[^ -]*p", "don't use (external) diff with -p for portability"),
+        (
+            r"^  (cat|find): .*: \$ENOENT\$",
+            "use test -f to test for file existence",
+        ),
+        (
+            r"^  diff -[^ -]*p",
+            "don't use (external) diff with -p for portability",
+        ),
         (r" readlink ", "use readlink.py instead of readlink"),
         (
             r"^  [-+][-+][-+] .* [-+]0000 \(glob\)",
@@ -235,7 +241,6 @@ utestpats = [
             "use $RUNTESTDIR/pdiff via extdiff (or -o/-p for false-positives)",
         ),
     ],
-    # warnings
     [
         (
             r"^  (?!.*\$LOCALIP|.*\$HGPORT)[^*?/\n]* \(glob\)$",
@@ -244,15 +249,13 @@ utestpats = [
     ],
 ]
 
+
 # transform plain test rules to unified test's
 for i in [0, 1]:
     for tp in testpats[i]:
         p = tp[0]
         m = tp[1]
-        if p.startswith(r"^"):
-            p = r"^  [$>] (%s)" % p[1:]
-        else:
-            p = r"^  [$>] .*(%s)" % p
+        p = f"^  [$>] ({p[1:]})" if p.startswith(r"^") else f"^  [$>] .*({p})"
         utestpats[i].append((p, m) + tp[2:])
 
 # don't transform the following rules:
@@ -522,17 +525,18 @@ get_ipython
 pycorepats = [
     [
         (
-            r"\bdef (?!cffi|%s)[a-z]+_[a-z][a-z_]*\(" % "|".join(underscorenames),
+            r"\bdef (?!cffi|%s)[a-z]+_[a-z][a-z_]*\("
+            % "|".join(underscorenames),
             "use foobar, not foo_bar naming",
         ),
         (
-            r"    (?!cffi|%s)[a-z]+_[a-z][a-z_]* = " % "|".join(underscorenames),
+            f'    (?!cffi|{"|".join(underscorenames)})[a-z]+_[a-z][a-z_]* = ',
             "use foobar, not foo_bar naming",
         ),
     ],
-    # warnings
     [],
 ]
+
 
 pyfilters = [
     (
@@ -740,7 +744,7 @@ _defaultlogger = norepeatlogger()
 
 def getblame(f):
     lines = []
-    for l in os.popen("hg annotate -un %s" % f):
+    for l in os.popen(f"hg annotate -un {f}"):
         start, line = l.split(":", 1)
         user, rev = start.split()
         lines.append((line[1:-1], user, rev))
@@ -774,10 +778,10 @@ def checkfile(
             try:
                 pre = post = fp.read()
             except UnicodeDecodeError as e:
-                print("%s while reading %s" % (e, f))
+                print(f"{e} while reading {f}")
                 return result
     except IOError as e:
-        print("Skipping %s, %s" % (f, str(e).split(":", 1)[0]))
+        print(f'Skipping {f}, {str(e).split(":", 1)[0]}')
         return result
 
     for name, match, magic, filters, pats in checks:
@@ -796,19 +800,16 @@ def checkfile(
             # tests easier. So, instead of writing it with a normal
             # spelling, we write it with the expected spelling from
             # tests/test-check-code.t
-            print("Skipping %s it has no-che?k-code (glob)" % f)
+            print(f"Skipping {f} it has no-che?k-code (glob)")
             return "Skip"  # skip checking this file
         for p, r in filters:
             post = re.sub(p, r, post)
         nerrs = len(pats[0])  # nerr elements are errors
-        if warnings:
-            pats = pats[0] + pats[1]
-        else:
-            pats = pats[0]
+        pats = pats[0] + pats[1] if warnings else pats[0]
         # print post # uncomment to show filtered version
 
         if debug:
-            print("Checking %s for %s" % (name, f))
+            print(f"Checking {name} for {f}")
 
         prelines = None
         errors = []
@@ -819,7 +820,7 @@ def checkfile(
                 p, msg = pat
                 ignore = None
             if i >= nerrs:
-                msg = "warning: " + msg
+                msg = f"warning: {msg}"
 
             pos = 0
             n = 0
@@ -839,7 +840,7 @@ def checkfile(
 
                 if ignore and re.search(ignore, l, re.MULTILINE):
                     if debug:
-                        print("Skipping %s for %s:%s (ignore pattern)" % (name, f, n))
+                        print(f"Skipping {name} for {f}:{n} (ignore pattern)")
                     continue
                 bd = ""
                 if blame:
@@ -849,7 +850,7 @@ def checkfile(
                     if n < len(blamecache):
                         bl, bu, br = blamecache[n]
                         if bl == l:
-                            bd = "%s@%s" % (bu, br)
+                            bd = f"{bu}@{br}"
 
                 errors.append((f, lineno and n + 1, l, msg, bd))
                 result = False

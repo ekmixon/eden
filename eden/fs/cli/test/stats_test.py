@@ -133,8 +133,7 @@ class HgBackingStoreStatsTest(unittest.TestCase):
             "store.hg.get_blob.p50.3600": 10,
         }
         table = get_store_latency(counters, "mononoke")
-        result = table.get("get_blob")
-        if result:
+        if result := table.get("get_blob"):
             self.assertEqual(result[1], ["20 μs", "30 μs", "40 μs", "10 μs"])
         else:
             # make pyre happy

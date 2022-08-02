@@ -139,31 +139,24 @@ def _filemerge(
     **kwargs
 ):
 
-    if premerge:
-        # copytracing worked if files to merge have different file names
-        # and filelog contents are different (fco.cmp(fcd) returns True if
-        # they are different). If filelog contents are the same then the file
-        # was moved in the rebase/graft/merge source, but wasn't changed in the
-        # rebase/graft/merge destination. This case mercurial would've handled
-        # even with disabled copytracing, so we don't want to log it.
-        if orig != fco.path() and fco.cmp(fcd):
-            # copytracing was in action, let's record it
-            if repo.ui.config("experimental", "copytrace") == "on":
-                msg = "success (fastcopytracing)"
-            else:
-                msg = "success"
+    if premerge and orig != fco.path() and fco.cmp(fcd):
+        # copytracing was in action, let's record it
+        if repo.ui.config("experimental", "copytrace") == "on":
+            msg = "success (fastcopytracing)"
+        else:
+            msg = "success"
 
-            try:
-                destctx = _getctxfromfctx(fcd)
-                srcctx = _getctxfromfctx(fco)
-                hexes = "%s, %s" % (_gethex(destctx), _gethex(srcctx))
-                paths = "%s, %s" % (orig, fco.path())
-                msg = "%s (%s; %s)" % (msg, hexes, paths)
-            except Exception as e:
+        try:
+            destctx = _getctxfromfctx(fcd)
+            srcctx = _getctxfromfctx(fco)
+            hexes = f"{_gethex(destctx)}, {_gethex(srcctx)}"
+            paths = f"{orig}, {fco.path()}"
+            msg = f"{msg} ({hexes}; {paths})"
+        except Exception as e:
                 # we don't expect any exceptions to happen, but to be 100%
                 # sure we don't break hg let's catch everything and log it
-                msg = "failed to log: %s" % (e,)
-            repo.ui.log("copytrace", msg=msg, reponame=_getreponame(repo, repo.ui))
+            msg = f"failed to log: {e}"
+        repo.ui.log("copytrace", msg=msg, reponame=_getreponame(repo, repo.ui))
 
     return origfunc(
         premerge, repo, wctx, mynode, orig, fcd, fco, fca, labels, *args, **kwargs
@@ -188,11 +181,8 @@ def opendbm(repo, flag):
         path = repo.localvfs.join(fname)
         try:
             return (opener(path, flag), error)
-        except error:
+        except (error, ImportError):
             continue
-        except ImportError:
-            continue
-
     return None, None
 
 
@@ -241,7 +231,7 @@ def _amend(orig, ui, repo, old, extra, pats, opts):
         db, error = opendbm(repo, "c")
         if db is None:
             # Database locked, can't record these amend-copies.
-            ui.log("copytrace", "Failed to open amendcopytrace db: %s" % error)
+            ui.log("copytrace", f"Failed to open amendcopytrace db: {error}")
             return node
 
         # Merge in any existing amend copies from any previous amends.
@@ -252,18 +242,21 @@ def _amend(orig, ui, repo, old, extra, pats, opts):
         except error as e:
             ui.log(
                 "copytrace",
-                "Failed to read key %s from amendcopytrace db: %s" % (old.hex(), e),
+                f"Failed to read key {old.hex()} from amendcopytrace db: {e}",
             )
+
             return node
 
         orig_encoded = json.loads(orig_data)
-        orig_amend_copies = dict(
-            (
-                pycompat.decodeutf8(codecs.decode(pycompat.encodeutf8(k), "base64")),
-                pycompat.decodeutf8(codecs.decode(pycompat.encodeutf8(v), "base64")),
+        orig_amend_copies = {
+            pycompat.decodeutf8(
+                codecs.decode(pycompat.encodeutf8(k), "base64")
+            ): pycompat.decodeutf8(
+                codecs.decode(pycompat.encodeutf8(v), "base64")
             )
             for (k, v) in pycompat.iteritems(orig_encoded)
-        )
+        }
+
 
         # Copytrace information is not valid if it refers to a file that
         # doesn't exist in a commit.  We need to update or remove entries
@@ -284,19 +277,21 @@ def _amend(orig, ui, repo, old, extra, pats, opts):
                 amend_copies[dst] = src
 
         # Write out the entry for the new amend commit.
-        encoded = dict(
-            (
-                pycompat.decodeutf8(codecs.encode(pycompat.encodeutf8(k), "base64")),
-                pycompat.decodeutf8(codecs.encode(pycompat.encodeutf8(v), "base64")),
+        encoded = {
+            pycompat.decodeutf8(
+                codecs.encode(pycompat.encodeutf8(k), "base64")
+            ): pycompat.decodeutf8(
+                codecs.encode(pycompat.encodeutf8(v), "base64")
             )
             for (k, v) in pycompat.iteritems(amend_copies)
-        )
+        }
+
         db[node] = json.dumps(encoded)
         try:
             db.close()
         except Exception as e:
             # Database corruption.  Not much we can do, so just log.
-            ui.log("copytrace", "Failed to close amendcopytrace db: %s" % e)
+            ui.log("copytrace", f"Failed to close amendcopytrace db: {e}")
 
     return node
 
@@ -322,12 +317,13 @@ def _getamendcopies(repo, dest, ancestor):
 
         # Load the amend copytrace data from this commit.
         encoded = json.loads(db[ctx.node()])
-        return dict(
-            (k.decode("base64"), v.decode("base64"))
+        return {
+            k.decode("base64"): v.decode("base64")
             for (k, v) in pycompat.iteritems(encoded)
-        )
+        }
+
     except Exception:
-        repo.ui.log("copytrace", "Failed to load amend copytrace for %s" % dest.hex())
+        repo.ui.log("copytrace", f"Failed to load amend copytrace for {dest.hex()}")
         return {}
     finally:
         try:
@@ -344,9 +340,10 @@ def _mergecopies(orig, repo, cdst, csrc, base):
         # make sure we don't break clients
         repo.ui.log(
             "copytrace",
-            "Copytrace failed: %s" % e,
+            f"Copytrace failed: {e}",
             reponame=_getreponame(repo, repo.ui),
         )
+
         return {}, {}, {}, {}, {}
     finally:
         repo.ui.log(
@@ -439,8 +436,6 @@ def _domergecopies(orig, repo, cdst, csrc, base):
     if csrc.rev() is None:
         csrc = csrc.p1()
 
-    copies = {}
-
     ctx = csrc
     changedfiles = set()
     sourcecommitnum = 0
@@ -457,18 +452,12 @@ def _domergecopies(orig, repo, cdst, csrc, base):
             return orig(repo, cdst, csrc, base)
 
     cp = copiesmod._forwardcopies(base, csrc)
-    for dst, src in pycompat.iteritems(cp):
-        if src in mdst:
-            copies[dst] = src
-
-    # file is missing if it isn't present in the destination, but is present in
-    # the base and present in the source.
-    # Presence in the base is important to exclude added files, presence in the
-    # source is important to exclude removed files.
-    missingfiles = list(
-        filter(lambda f: f not in mdst and f in base and f in csrc, changedfiles)
-    )
-    if missingfiles:
+    copies = {dst: src for dst, src in pycompat.iteritems(cp) if src in mdst}
+    if missingfiles := list(
+        filter(
+            lambda f: f not in mdst and f in base and f in csrc, changedfiles
+        )
+    ):
         # Use the following file name heuristic to find moves: moves are
         # usually either directory moves or renames of the files in the
         # same directory. That means that we can look for the files in dstc
@@ -507,10 +496,8 @@ def _domergecopies(orig, repo, cdst, csrc, base):
                 repo.ui.log("copytrace", msg=msg, reponame=_getreponame(repo, repo.ui))
 
     if repo.ui.configbool("copytrace", "enableamendcopytrace"):
-        # Look for additional amend-copies.
-        amend_copies = _getamendcopies(repo, cdst, base.p1())
-        if amend_copies:
-            repo.ui.debug("Loaded amend copytrace for %s" % cdst)
+        if amend_copies := _getamendcopies(repo, cdst, base.p1()):
+            repo.ui.debug(f"Loaded amend copytrace for {cdst}")
             for dst, src in pycompat.iteritems(amend_copies):
                 if dst not in copies:
                     copies[dst] = src
@@ -565,10 +552,7 @@ def _getreponame(repo, ui):
 
 
 def _getctxfromfctx(fctx):
-    if fctx.isabsent():
-        return fctx._ctx
-    else:
-        return fctx._changectx
+    return fctx._ctx if fctx.isabsent() else fctx._changectx
 
 
 def _gethex(ctx):

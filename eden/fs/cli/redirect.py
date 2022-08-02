@@ -125,9 +125,7 @@ class RepoPathDisposition(enum.Enum):
         if path.is_dir():
             if is_bind_mount(path):
                 return cls.IS_BIND_MOUNT
-            if is_empty_dir(path):
-                return cls.IS_EMPTY_DIR
-            return cls.IS_NON_EMPTY_DIR
+            return cls.IS_EMPTY_DIR if is_empty_dir(path) else cls.IS_NON_EMPTY_DIR
         return cls.IS_FILE
 
 
@@ -146,19 +144,13 @@ class RedirectionType(enum.Enum):
     @classmethod
     def from_arg_str(cls, arg: str) -> "RedirectionType":
         name_to_value = {"bind": cls.BIND, "symlink": cls.SYMLINK}
-        value = name_to_value.get(arg)
-        if value:
+        if value := name_to_value.get(arg):
             return value
         raise ValueError(f"{arg} is not a valid RedirectionType")
 
 
 def opt_paths_are_equal(a: Optional[Path], b: Optional[Path]) -> bool:
-    if a is not None and b is not None:
-        return a == b
-    if a is None and b is None:
-        return True
-    # either one or the other is None, but not both, so they are not equal
-    return False
+    return a == b if a is not None and b is not None else a is None and b is None
 
 
 class Redirection:
@@ -188,9 +180,11 @@ class Redirection:
         )
 
     def as_dict(self, checkout: EdenCheckout) -> Dict[str, str]:
-        res = {}
-        for name in ["repo_path", "type", "source", "state"]:
-            res[name] = str(getattr(self, name))
+        res = {
+            name: str(getattr(self, name))
+            for name in ["repo_path", "type", "source", "state"]
+        }
+
         res["target"] = str(self.expand_target_abspath(checkout))
         return res
 
@@ -451,10 +445,10 @@ def load_redirection_profile(path: Path) -> Dict[str, RedirectionType]:
     redirection type that it contains.
     """
     config = load_toml_config(path)
-    mapping: Dict[str, RedirectionType] = {}
-    for k, v in config["redirections"].items():
-        mapping[k] = RedirectionType.from_arg_str(v)
-    return mapping
+    return {
+        k: RedirectionType.from_arg_str(v)
+        for k, v in config["redirections"].items()
+    }
 
 
 def get_configured_redirections(checkout: EdenCheckout) -> Dict[str, Redirection]:
@@ -484,11 +478,11 @@ def get_configured_redirections(checkout: EdenCheckout) -> Dict[str, Redirection
         )
 
     if sys.platform == "win32":
-        # Convert path separator to backslash on Windows
-        normalized_redirs = {}
-        for repo_path, redirection in redirs.items():
-            normalized_redirs[repo_path.replace("/", "\\")] = redirection
-        return normalized_redirs
+        return {
+            repo_path.replace("/", "\\"): redirection
+            for repo_path, redirection in redirs.items()
+        }
+
 
     return redirs
 
@@ -538,34 +532,33 @@ def get_effective_redirections(
             # we don't know enough to tell whether the mount points where
             # we want it to point, so we just assume that it is in the right
             # state.
-        else:
-            if redir.type == RedirectionType.BIND and sys.platform != "win32":
-                # We expected both of these types to be visible in the
-                # mount table, but they were not, so we consider them to
-                # be in the NOT_MOUNTED state.
-                redir.state = RedirectionState.NOT_MOUNTED
-            elif redir.type == RedirectionType.SYMLINK or sys.platform == "win32":
+        elif redir.type == RedirectionType.BIND and sys.platform != "win32":
+            # We expected both of these types to be visible in the
+            # mount table, but they were not, so we consider them to
+            # be in the NOT_MOUNTED state.
+            redir.state = RedirectionState.NOT_MOUNTED
+        elif redir.type == RedirectionType.SYMLINK or sys.platform == "win32":
+            try:
+                # Resolve to normalize extended-length path on Windows
+                expected_target = redir.expand_target_abspath(checkout)
+                if expected_target:
+                    expected_target = expected_target.resolve()
+                symlink_path = os.fsdecode(redir.expand_repo_path(checkout))
                 try:
-                    # Resolve to normalize extended-length path on Windows
-                    expected_target = redir.expand_target_abspath(checkout)
-                    if expected_target:
-                        expected_target = expected_target.resolve()
-                    symlink_path = os.fsdecode(redir.expand_repo_path(checkout))
-                    try:
-                        # TODO: replace this with Path.readlink once Python 3.9+
-                        target = Path(os.readlink(symlink_path)).resolve()
-                    except ValueError as exc:
-                        # Windows throws ValueError when the target is not a symlink
-                        raise OSError(errno.EINVAL) from exc
-                    if target != expected_target:
-                        redir.state = RedirectionState.SYMLINK_INCORRECT
-                except OSError:
-                    # We're considering a variety of errors that might
-                    # manifest around trying to read the symlink as meaning
-                    # that the symlink is effectively missing, even if it
-                    # isn't literally missing.  eg: EPERM means we can't
-                    # resolve it, so it is effectively no good.
-                    redir.state = RedirectionState.SYMLINK_MISSING
+                    # TODO: replace this with Path.readlink once Python 3.9+
+                    target = Path(os.readlink(symlink_path)).resolve()
+                except ValueError as exc:
+                    # Windows throws ValueError when the target is not a symlink
+                    raise OSError(errno.EINVAL) from exc
+                if target != expected_target:
+                    redir.state = RedirectionState.SYMLINK_INCORRECT
+            except OSError:
+                # We're considering a variety of errors that might
+                # manifest around trying to read the symlink as meaning
+                # that the symlink is effectively missing, even if it
+                # isn't literally missing.  eg: EPERM means we can't
+                # resolve it, so it is effectively no good.
+                redir.state = RedirectionState.SYMLINK_MISSING
         redirs[rel_path] = redir
 
     return redirs
@@ -633,10 +626,7 @@ def apply_redirection_configs_to_checkout_config(
 
 
 def is_empty_dir(path: Path) -> bool:
-    for ent in path.iterdir():
-        if ent not in (".", ".."):
-            return False
-    return True
+    return all(ent in (".", "..") for ent in path.iterdir())
 
 
 def prepare_redirection_list(checkout: EdenCheckout) -> str:
@@ -659,9 +649,8 @@ def create_redirection_configs(
 
     if use_json:
         return json.dumps(data)
-    else:
-        columns = ["repo_path", "type", "target", "source", "state"]
-        return tabulate.tabulate(columns, data)
+    columns = ["repo_path", "type", "target", "source", "state"]
+    return tabulate.tabulate(columns, data)
 
 
 @redirect_cmd("list", "List redirections")
@@ -763,10 +752,11 @@ class UnmountCmd(Subcmd):
 
         # recompute and display the current state
         redirs = get_effective_redirections(checkout, mount_table)
-        ok = True
-        for redir in redirs.values():
-            if redir.state == RedirectionState.MATCHES_CONFIGURATION:
-                ok = False
+        ok = all(
+            redir.state != RedirectionState.MATCHES_CONFIGURATION
+            for redir in redirs.values()
+        )
+
         return 0 if ok else 1
 
 
@@ -812,10 +802,11 @@ class FixupCmd(Subcmd):
 
         # recompute and display the current state
         redirs = get_effective_redirections(checkout, mount_table)
-        ok = True
-        for redir in redirs.values():
-            if redir.state != RedirectionState.MATCHES_CONFIGURATION:
-                ok = False
+        ok = all(
+            redir.state == RedirectionState.MATCHES_CONFIGURATION
+            for redir in redirs.values()
+        )
+
         return 0 if ok else 1
 
 
@@ -923,7 +914,7 @@ class AddCmd(Subcmd):
                 resolve_repo_relative_path(checkout.path, Path(args.repo_path))
             )
         except RuntimeError as exc:
-            print(str(exc), file=sys.stderr)
+            print(exc, file=sys.stderr)
             return 1
 
         # Get only the explicitly configured entries for the purposes of the
@@ -980,12 +971,7 @@ class DelCmd(Subcmd):
         instance, checkout, _rel_path = cmd_util.require_checkout(args, args.mount)
 
         redirs = get_configured_redirections(checkout)
-        # Note that we're deliberately not using the same validation logic
-        # for args.repo_path that we do for the add case for now so that we
-        # provide a way to remove bogus redirection paths.  After we've deployed
-        # the improved `add` validation for a while, we can use it here also.
-        redir = redirs.get(args.repo_path)
-        if redir:
+        if redir := redirs.get(args.repo_path):
             redir.remove_existing(checkout)
             del redirs[args.repo_path]
             config = apply_redirection_configs_to_checkout_config(
@@ -995,8 +981,7 @@ class DelCmd(Subcmd):
             return 0
 
         redirs = get_effective_redirections(checkout, mtab.new())
-        redir = redirs.get(args.repo_path)
-        if redir:
+        if redir := redirs.get(args.repo_path):
             # This path isn't possible to trigger until we add profiles,
             # but let's be ready for it anyway.
             print(

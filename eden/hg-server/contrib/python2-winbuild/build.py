@@ -42,24 +42,24 @@ import zipfile
 def git(dest, *args, **kwargs):
     fullargs = ["git"]
     if dest:
-        fullargs += ["--git-dir=%s/.git" % dest, "--work-tree=%s" % dest]
+        fullargs += [f"--git-dir={dest}/.git", f"--work-tree={dest}"]
     subprocess.check_call(fullargs + list(args), **kwargs)
 
 
 def checkout(url, tag, oid, dest):
     if not os.path.isdir(dest):
-        print("Creating %s" % dest)
+        print(f"Creating {dest}")
         git(None, "init", dest)
-    print("Fetching %s from %s" % (tag, url))
+    print(f"Fetching {tag} from {url}")
     git(dest, "fetch", "--depth=1", url, tag)
-    print("Checking out %s" % tag)
+    print(f"Checking out {tag}")
     git(dest, "update-ref", "refs/heads/master", oid)
     git(dest, "reset", "--hard", "master")
 
 
 def patch(patches, dest):
     for patch in sorted(glob.glob("*.patch")):
-        print("Applying %s" % patch)
+        print(f"Applying {patch}")
         git(dest, "am", stdin=open(patch))
 
 
@@ -105,30 +105,30 @@ def pack(src, dest):
         mkdirp(path)
 
     amd64dir = os.path.join(src, "PCbuild", "amd64")
-    print("Copying runtime binary files from %s to %s" % (amd64dir, bindest))
+    print(f"Copying runtime binary files from {amd64dir} to {bindest}")
     for name in os.listdir(amd64dir):
         if name.endswith(".pyd") or name in {"python27.dll", "python.exe"}:
             shutil.copy(os.path.join(amd64dir, name), bindest)
 
     includedir = os.path.join(src, "Include")
-    print("Copying development files to %s" % includedest)
+    print(f"Copying development files to {includedest}")
     for name in os.listdir(includedir):
         shutil.copy(os.path.join(includedir, name), includedest)
     shutil.copy(os.path.join(src, "PC", "pyconfig.h"), includedest)
 
-    print("Copying library files to %s" % libdest)
+    print(f"Copying library files to {libdest}")
     for name in os.listdir(amd64dir):
         if name.endswith(".exp") or name.endswith(".lib"):
             shutil.copy(os.path.join(amd64dir, name), libdest)
 
-    print("Copying debug files to %s" % debugdest)
+    print(f"Copying debug files to {debugdest}")
     for name in os.listdir(amd64dir):
         if name.endswith(".pdb"):
             shutil.copy(os.path.join(amd64dir, name), debugdest)
 
     puredir = os.path.join(src, "Lib")
     zippath = os.path.join(bindest, "python27.zip")
-    print("Packing pure modules from %s to %s" % (puredir, zippath))
+    print(f"Packing pure modules from {puredir} to {zippath}")
     with zipfile.PyZipFile(zippath, "w") as z:
         z.writepy(puredir)
         for name in os.listdir(puredir):

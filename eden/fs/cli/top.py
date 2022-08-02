@@ -239,9 +239,7 @@ class Window:
     # the number of remaining rows left in the window, if in the scrollable
     # section, there is no limit, so this returns None
     def get_remaining_rows(self) -> Optional[int]:
-        if self.scrollable:
-            return None
-        return self.height - self.current_line
+        return None if self.scrollable else self.height - self.current_line
 
     # how much horizontal space remains in the window
     def get_remaining_columns(self) -> int:
@@ -307,7 +305,7 @@ class Window:
     ) -> None:
         if self.scrollable:
             if self.in_scrollable_section(y):
-                y = y - self.scrollable_offset
+                y -= self.scrollable_offset
                 self._write_to_scr(y, x, text, max_width, attr)
         else:
             self._write_to_scr(y, x, text, max_width, attr)
@@ -320,17 +318,7 @@ class Window:
                 attr = DEFAULT_COLOR_PAIR
             self.stdscr.addnstr(y, x, text, max_width, attr)
         except Exception as ex:
-            # When attempting to write to the very last terminal cell curses will
-            # successfully display the data but will return an error since the logical
-            # cursor cannot be advanced to the next cell.
-            #
-            # We just ignore the error to handle this case.
-            # If you do want to look at errors during development you can enable the
-            # following code, but note that the error messages from the curses module
-            # usually are not very informative.
-            if False:
-                with open("/tmp/eden_top.log", "a") as f:
-                    f.write(f"error at ({y}, {x}): {ex}\n")
+            pass
 
     def get_keypress(self) -> int:
         return int(self.stdscr.getch())
@@ -459,7 +447,7 @@ class Top:
         return mainloop
 
     def running(self):
-        return self.state == State.MAIN or self.state == State.HELP
+        return self.state in [State.MAIN, State.HELP]
 
     def update(self, client) -> None:
         if self.ephemeral:
@@ -583,9 +571,7 @@ class Top:
             stage = RequestStage(raw_stage)
             metric = RequestMetric(pieces[3])
             return (stage, metric)
-        except KeyError:
-            return None
-        except ValueError:
+        except (KeyError, ValueError):
             return None
 
     def render(self, window: Window) -> None:

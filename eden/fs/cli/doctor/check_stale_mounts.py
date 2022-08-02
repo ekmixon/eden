@@ -17,8 +17,7 @@ from eden.fs.cli.util import is_edenfs_mount_device
 def check_for_stale_mounts(
     tracker: ProblemTracker, mount_table: mtab.MountTable
 ) -> None:
-    stale_mounts = get_all_stale_eden_mount_points(mount_table)
-    if stale_mounts:
+    if stale_mounts := get_all_stale_eden_mount_points(mount_table):
         tracker.add_problem(StaleMountsFound(stale_mounts, mount_table))
 
 
@@ -47,15 +46,9 @@ class StaleMountsFound(FixableProblem):
         return f"Unmounting {self._mounts_str()}"
 
     def perform_fix(self) -> None:
-        unmounted = []
         failed_to_unmount = []
 
-        # Attempt to lazy unmount all of them first. For some reason,
-        # lazy unmount can sometimes release any bind mounts inside.
-        for mp in self._mounts:
-            if self._mount_table.unmount_lazy(mp):
-                unmounted.append(mp)
-
+        unmounted = [mp for mp in self._mounts if self._mount_table.unmount_lazy(mp)]
         # Use a refreshed list -- it's possible MNT_DETACH succeeded on some of
         # the points.
         for mp in get_all_stale_eden_mount_points(self._mount_table):

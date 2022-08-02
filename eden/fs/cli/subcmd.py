@@ -52,9 +52,7 @@ class Subcmd(abc.ABC):
         return self.HELP
 
     def get_aliases(self) -> List[str]:
-        if self.ALIASES is None:
-            return []
-        return self.ALIASES[:]
+        return [] if self.ALIASES is None else self.ALIASES[:]
 
     def setup_parser(self, parser: argparse.ArgumentParser) -> None:
         # Subclasses should override setup_parser() if they have any
@@ -156,15 +154,14 @@ def _get_subparsers(
     if subparsers is None:
         return None
 
-    for action in subparsers._actions:
-        if action.option_strings:
-            continue
-        if not isinstance(action, argparse._SubParsersAction):
-            # This is not a subcommand
-            return None
-        return action
-
-    return None
+    return next(
+        (
+            action if isinstance(action, argparse._SubParsersAction) else None
+            for action in subparsers._actions
+            if not action.option_strings
+        ),
+        None,
+    )
 
 
 def do_help(parser: argparse.ArgumentParser, help_args: List[str]) -> int:

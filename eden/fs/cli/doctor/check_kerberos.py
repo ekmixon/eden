@@ -17,8 +17,7 @@ class KerberosChecker:
         if not instance.get_config_bool("doctor.enable-kerberos-check", default=False):
             return
 
-        result = subprocess.call(["klist", "-s"])
-        if result:
+        if result := subprocess.call(["klist", "-s"]):
             tracker.add_problem(KerberosProblem())
 
 

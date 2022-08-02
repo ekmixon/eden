@@ -77,10 +77,7 @@ class CheckoutAndPatterns(NamedTuple):
 # path abstractions to recognize this as a special character because
 # they treat \ as a path separator.
 def _clean_pattern(pattern: str) -> str:
-    if sys.platform == "win32":
-        return pattern.replace("\\", "/")
-    else:
-        return pattern
+    return pattern.replace("\\", "/") if sys.platform == "win32" else pattern
 
 
 def _find_checkout_and_patterns(

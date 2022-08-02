@@ -48,7 +48,7 @@ def catnotate(ui, repo, file1, *args, **opts):
 
         for (num, line) in enumerate(data.split("\n"), start=1):
             line = line + "\n"
-            fp.write("%s:%s: %s" % (path, num, line))
+            fp.write(f"{path}:{num}: {line}")
         fp.close()
 
     # Automation often uses hg cat on single files, so special case it

@@ -164,8 +164,9 @@ class EdenConfigParser:
                 section=section,
                 option=option,
                 value=value,
-                expected_type=expected_type_temp,
+                expected_type_temp=expected_type_temp,
             )
+
         return self._interpolate_value(  # type: ignore  # T39124448, T39125053
             section=section, option=option, value=value
         )
@@ -221,10 +222,11 @@ class EdenConfigParser:
     ) -> Union[ConfigValue, _UnsupportedValue]:
         if isinstance(value, (bool, str)):
             return value
-        if isinstance(value, Sequence):
-            if all(isinstance(item, str) for item in value):
-                items = cast(Sequence[str], value)
-                return Strs(items)
+        if isinstance(value, Sequence) and all(
+            isinstance(item, str) for item in value
+        ):
+            items = cast(Sequence[str], value)
+            return Strs(items)
         return value
 
 
@@ -281,9 +283,7 @@ def _toml_type_name(type: Type) -> str:
         return "boolean"
     if type is list:
         return "array"
-    if type is str:
-        return "string"
-    return type.__name__
+    return "string" if type is str else type.__name__
 
 
 def _toml_value(value: Union[bool, str]) -> str:

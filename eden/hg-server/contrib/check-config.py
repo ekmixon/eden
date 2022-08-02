@@ -68,46 +68,33 @@ def main(args):
         for l in open(f):
             linenum += 1
 
-            # check topic-like bits
-            m = re.match("\s*``(\S+)``", l)
-            if m:
-                prevname = m.group(1)
+            if m := re.match("\s*``(\S+)``", l):
+                prevname = m[1]
             if re.match("^\s*-+$", l):
                 sect = prevname
                 prevname = ""
 
             if sect and prevname:
-                name = sect + "." + prevname
+                name = f"{sect}.{prevname}"
                 documented[name] = 1
 
-            # check docstring bits
-            m = re.match(r"^\s+\[(\S+)\]", l)
-            if m:
-                confsect = m.group(1)
+            if m := re.match(r"^\s+\[(\S+)\]", l):
+                confsect = m[1]
                 continue
-            m = re.match(r"^\s+(?:#\s*)?(\S+) = ", l)
-            if m:
-                name = confsect + "." + m.group(1)
+            if m := re.match(r"^\s+(?:#\s*)?(\S+) = ", l):
+                name = f"{confsect}." + m[1]
                 documented[name] = 1
 
-            # like the bugzilla extension
-            m = re.match(r"^\s*(\S+\.\S+)$", l)
-            if m:
-                documented[m.group(1)] = 1
+            if m := re.match(r"^\s*(\S+\.\S+)$", l):
+                documented[m[1]] = 1
 
-            # like convert
-            m = re.match(r"^\s*:(\S+\.\S+):\s+", l)
-            if m:
-                documented[m.group(1)] = 1
+            if m := re.match(r"^\s*:(\S+\.\S+):\s+", l):
+                documented[m[1]] = 1
 
-            # quoted in help or docstrings
-            m = re.match(r".*?``(\S+\.\S+)``", l)
-            if m:
-                documented[m.group(1)] = 1
+            if m := re.match(r".*?``(\S+\.\S+)``", l):
+                documented[m[1]] = 1
 
-            # look for ignore markers
-            m = ignorere.search(l)
-            if m:
+            if m := ignorere.search(l):
                 if m.group("reason") == "inconsistent":
                     allowinconsistent.add(m.group("config"))
                 else:
@@ -115,8 +102,7 @@ def main(args):
 
             # look for code-like bits
             line = carryover + l
-            m = configre.search(line) or configwithre.search(line)
-            if m:
+            if m := configre.search(line) or configwithre.search(line):
                 ctype = m.group("ctype")
                 if not ctype:
                     ctype = "str"
@@ -140,25 +126,19 @@ def main(args):
                 foundopts[name] = (ctype, default)
                 carryover = ""
             else:
-                m = re.search(configpartialre, line)
-                if m:
-                    carryover = line
-                else:
-                    carryover = ""
-
+                carryover = line if (m := re.search(configpartialre, line)) else ""
     for name in sorted(foundopts):
-        if name not in documented:
-            if not (
-                name.startswith("devel.")
-                or name.startswith("experimental.")
-                or name.startswith("debug.")
-            ):
-                ctype, default = foundopts[name]
-                if default:
-                    default = " [%s]" % default
+        if name not in documented and not (
+            name.startswith("devel.")
+            or name.startswith("experimental.")
+            or name.startswith("debug.")
+        ):
+            ctype, default = foundopts[name]
+            if default:
+                default = f" [{default}]"
                 # config name starting with "_" are considered as internal.
-                if "._" not in name:
-                    print("undocumented: %s (%s)%s" % (name, ctype, default))
+            if "._" not in name:
+                print(f"undocumented: {name} ({ctype}){default}")
 
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ def write_latency_record(operation: str, matrix, out: TextIO) -> None:
 
     for i in range(len(percentile)):
         operation_name = ""
-        if i == int(len(percentile) / 2):
+        if i == len(percentile) // 2:
             operation_name = operation
         out.write(
             LATENCY_FORMAT_STR.format(
@@ -92,9 +92,7 @@ def format_size(size: int) -> str:
         return "{:.1f} MB".format(size / 1000000)
     if size > 1000:
         return "{:.1f} KB".format(size / 1000)
-    if size > 0:
-        return "{} B".format(size)
-    return "0"
+    return f"{size} B" if size > 0 else "0"
 
 
 def format_time(time: int) -> str:
@@ -105,4 +103,4 @@ def format_time(time: int) -> str:
     elif time >= 60:
         return "{:.1f} minute(s)".format(time / 60)
     else:
-        return "{} second(s)".format(time)
+        return f"{time} second(s)"

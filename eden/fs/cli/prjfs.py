@@ -41,4 +41,4 @@ def PrjGetOnDiskFileState(path: Path) -> PRJ_FILE_STATE:
         return PRJ_FILE_STATE(state.value)
 
     # It should never reach here, but just to make typechecker happy
-    raise RuntimeError("Windows Error: " + result)
+    raise RuntimeError(f"Windows Error: {result}")

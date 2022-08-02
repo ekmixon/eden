@@ -132,9 +132,7 @@ class SOCKADDR_UN(ctypes.Structure):
 class WindowsSocketException(Exception):
     def __init__(self, code):
         # type: (int) -> None
-        super(WindowsSocketException, self).__init__(
-            "Windows Socket Error: {}".format(code)
-        )
+        super(WindowsSocketException, self).__init__(f"Windows Socket Error: {code}")
 
 
 class WindowsSocketHandle(object):
@@ -224,7 +222,7 @@ class WindowsSocketHandle(object):
         buff = ctypes.create_string_buffer(size)
         retsize = recv(self.fd, buff, size, 0)
         self._checkReturnCode(retsize)
-        return buff.raw[0:retsize]
+        return buff.raw[:retsize]
 
     def getpeername(self):
         # type: () -> str

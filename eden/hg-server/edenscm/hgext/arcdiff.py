@@ -57,10 +57,7 @@ def _differentialhash(ui, repo, phabrev):
         info = client.getrevisioninfo(timeout, signalstatus, [phabrev]).get(
             str(phabrev)
         )
-        if not info:
-            return None
-        return info
-
+        return info or None
     except graphql.ClientError as e:
         ui.warn(_("Error calling graphql: %s\n") % str(e))
         return None
@@ -110,22 +107,22 @@ def _diff2o(ui, repo, rev1, rev2, *pats, **opts):
             line = pycompat.decodeutf8(hunklines[i], errors="replace")
             i += 1
             if line[:2] == "++":
-                changelines.append("+" + line[2:])
+                changelines.append(f"+{line[2:]}")
             elif line[:2] == "+-":
-                changelines.append("-" + line[2:])
+                changelines.append(f"-{line[2:]}")
             elif line[:2] == "-+":
-                changelines.append("-" + line[2:])
+                changelines.append(f"-{line[2:]}")
             elif line[:2] == "--":
-                changelines.append("+" + line[2:])
+                changelines.append(f"+{line[2:]}")
             elif line[:2] == "@@" or line[1:3] == "@@":
-                if len(changelines) < 1 or changelines[-1] != "...\n":
+                if not changelines or changelines[-1] != "...\n":
                     changelines.append("...\n")
             else:
                 changelines.append(line)
         if len(changelines):
             ui.write(_("Changed: %s\n") % f)
             for line in changelines:
-                ui.write("| " + line)
+                ui.write(f"| {line}")
     wholefilechanges = files1 ^ files2
     for f in wholefilechanges:
         ui.write(_("Added/removed: %s\n") % f)
@@ -165,7 +162,7 @@ def _diff(orig, ui, repo, *pats, **opts):
 
     # if patterns aren't provided, restrict diff to files in both changesets
     # this prevents performing a diff on rebased changes
-    if len(pats) == 0:
+    if not pats:
         prev = set(repo[rev].files())
         curr = set(repo[targetrev].files())
         pats = tuple(os.path.join(repo.root, p) for p in prev | curr)

@@ -46,12 +46,9 @@ def main():
     cwd = os.getcwd()
     readonly = False
     args = sys.argv[1:]
-    while len(args):
-        if args[0] == '--read-only':
-            readonly = True
-            args.pop(0)
-        else:
-            break
+    while len(args) and args[0] == '--read-only':
+        readonly = True
+        args.pop(0)
     allowed_paths = [os.path.normpath(os.path.join(cwd,
                                                    os.path.expanduser(path)))
                      for path in args]

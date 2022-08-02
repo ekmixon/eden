@@ -108,17 +108,19 @@ def _openlogfile(ui, vfs):
         maxfiles = ui.configint("blackbox", "maxfiles")
         for i in range(maxfiles - 1, 1, -1):
             rotate(oldpath="%s.%d" % (path, i - 1), newpath="%s.%d" % (path, i))
-        rotate(oldpath=path, newpath=maxfiles > 0 and path + ".1")
+        rotate(oldpath=path, newpath=maxfiles > 0 and f"{path}.1")
     return vfs(name, "a")
 
 
 def wrapui(ui):
+
+
+
     class blackboxui(ui.__class__):
         @property
         def _bbvfs(self):
             vfs = None
-            repo = getattr(self, "_bbrepo", lambda: None)()
-            if repo:
+            if repo := getattr(self, "_bbrepo", lambda: None)():
                 vfs = repo.localvfs
                 if not vfs.isdir("."):
                     vfs = None
@@ -132,20 +134,13 @@ def wrapui(ui):
             global lastui
             super(blackboxui, self).log(event, *msg, **opts)
 
-            if not "*" in self.track and not event in self.track:
+            if "*" not in self.track and event not in self.track:
                 return
 
             if not msg or not msg[0]:
                 return
 
-            if self._bbvfs:
-                ui = self
-            else:
-                # certain ui instances exist outside the context of
-                # a repo, so just default to the last blackbox that
-                # was seen.
-                ui = lastui()
-
+            ui = self if self._bbvfs else lastui()
             if not ui:
                 return
             vfs = ui._bbvfs
@@ -192,13 +187,9 @@ def wrapui(ui):
                     missing=True, merge=False, branch=False
                 ):
                     changed = "+"
-            if ui.configbool("blackbox", "logsource"):
-                src = " [%s]" % event
-            else:
-                src = ""
-            requestid = ui.environ.get("HGREQUESTID") or ""
-            if requestid:
-                src += "[%s]" % requestid
+            src = f" [{event}]" if ui.configbool("blackbox", "logsource") else ""
+            if requestid := ui.environ.get("HGREQUESTID") or "":
+                src += f"[{requestid}]"
             try:
                 fmt = "%s %s @%s%s (%s)%s> %s"
                 args = (date, user, rev, changed, pid, src, formattedmsg)
@@ -216,6 +207,7 @@ def wrapui(ui):
 
         def setrepo(self, repo):
             self._bbrepo = weakref.ref(repo)
+
 
     ui.__class__ = blackboxui
     uimod.ui = blackboxui

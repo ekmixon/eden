@@ -209,7 +209,7 @@ def chdir(nwd):
 # Rename hg to $HGNAME. Useful when "hg" is a wrapper calling $HGNAME (or chg).
 hgname = os.environ.get("HGNAME", "hg")
 if not re.match("\Ahg[.0-9a-z-]*\Z", hgname):
-    raise RuntimeError("Illegal HGNAME: %s" % hgname)
+    raise RuntimeError(f"Illegal HGNAME: {hgname}")
 
 
 def cancompile(cc, code):
@@ -217,9 +217,8 @@ def cancompile(cc, code):
     devnull = oldstderr = None
     try:
         fname = os.path.join(tmpdir, "testcomp.c")
-        f = open(fname, "w")
-        f.write(code)
-        f.close()
+        with open(fname, "w") as f:
+            f.write(code)
         # Redirect stderr to /dev/null to hide any error messages
         # from the compiler.
         # This will have to be changed if we ever have to check
@@ -331,9 +330,6 @@ def findhg():
     # if retcode == 0 and not filterhgerr(err):
     return hgcommand(hgcmd, hgenv)
 
-    # Neither local or system hg can be used.
-    return None
-
 
 def localhgenv():
     """Get an environment dictionary to use for invoking or importing
@@ -411,7 +407,13 @@ versionhash = str(struct.unpack(">Q", hashlib.sha1(versionb).digest()[:8])[0]).e
     "ascii"
 )
 
-chgcflags = ["-std=c99", "-D_GNU_SOURCE", "-DHAVE_VERSIONHASH", "-I%s" % builddir]
+chgcflags = [
+    "-std=c99",
+    "-D_GNU_SOURCE",
+    "-DHAVE_VERSIONHASH",
+    f"-I{builddir}",
+]
+
 versionhashpath = pjoin(builddir, "versionhash.h")
 write_if_changed(versionhashpath, b"#define HGVERSIONHASH %sULL\n" % versionhash)
 
@@ -543,7 +545,7 @@ class asset(object):
             destdir = os.path.splitext(name)[0]
             if destdir.endswith(".tar"):
                 destdir = destdir[:-4]
-        assert name != destdir, "name (%s) and destdir cannot be the same" % name
+        assert name != destdir, f"name ({name}) and destdir cannot be the same"
         self.name = name
         self.url = url
         self.destdir = destdir
@@ -570,7 +572,7 @@ class asset(object):
             args = [sys.executable, lfspypath, "-q", "download", destpath]
         else:
             # via external URL
-            assert self.url, "Cannot download %s - no URL provided" % self.name
+            assert self.url, f"Cannot download {self.name} - no URL provided"
             args = ["curl", "-L", self.url, "-o", destpath]
         subprocess.check_call(args)
 
@@ -578,22 +580,22 @@ class asset(object):
         destdir = self.destdir
         srcpath = pjoin(builddir, self.name)
         destpath = pjoin(builddir, destdir)
-        assert os.path.isfile(srcpath), "%s is not downloaded properly" % srcpath
+        assert os.path.isfile(srcpath), f"{srcpath} is not downloaded properly"
         ensureempty(destpath)
 
         if srcpath.endswith(".tar.gz"):
             with tarfile.open(srcpath, "r") as f:
                 # Be smarter: are all paths in the tar already starts with
                 # destdir? If so, strip it.
-                prefix = destdir + "/"
-                if all((name + "/").startswith(prefix) for name in f.getnames()):
+                prefix = f"{destdir}/"
+                if all(f"{name}/".startswith(prefix) for name in f.getnames()):
                     destpath = os.path.dirname(destpath)
                 f.extractall(destpath)
         elif srcpath.endswith(".zip") or srcpath.endswith(".whl"):
             with zipfile.ZipFile(srcpath, "r") as f:
                 # Same as above. Strip the destdir name if all entries have it.
-                prefix = destdir + "/"
-                if all((name + "/").startswith(prefix) for name in f.namelist()):
+                prefix = f"{destdir}/"
+                if all(f"{name}/".startswith(prefix) for name in f.namelist()):
                     destpath = os.path.dirname(destpath)
                 f.extractall(destpath)
         else:
@@ -611,7 +613,7 @@ class asset(object):
 
     def _markready(self):
         with open(self._readypath, "w") as f:
-            f.write("%s" % hash(self))
+            f.write(f"{hash(self)}")
 
     @property
     def _readypath(self):
@@ -668,7 +670,7 @@ class edenpythrift(asset):
         destdir = self.destdir
         srcpath = pjoin(builddir, self.name)
         destpath = pjoin(builddir, destdir)
-        assert os.path.isfile(srcpath), "%s is not downloaded properly" % srcpath
+        assert os.path.isfile(srcpath), f"{srcpath} is not downloaded properly"
         ensureempty(destpath)
 
         with zipfile.ZipFile(srcpath, "r") as f:
@@ -685,8 +687,8 @@ class thriftasset(asset):
         assert isgetdepsbuild, "can only build this only via the getdeps.py script"
 
         if destdir is None:
-            destdir = name + "-py"
-        assert name != destdir, "name (%s) and destdir cannot be the same" % name
+            destdir = f"{name}-py"
+        assert name != destdir, f"name ({name}) and destdir cannot be the same"
 
         super(thriftasset, self).__init__(name=name, destdir=destdir)
         self.sourcemap = sourcemap
@@ -816,7 +818,7 @@ class hgbuildmo(build):
 
         podir = "i18n"
         if not os.path.isdir(podir):
-            self.warn("could not find %s/ directory" % podir)
+            self.warn(f"could not find {podir}/ directory")
             return
 
         join = os.path.join
@@ -942,10 +944,10 @@ class buildembedded(Command):
         if not os.path.exists(pylibpath):
             # a fallback option
             pylibpath = ctypes.util.find_library(pylib)
-        log.debug("Python dynamic library is copied from: %s" % pylibpath)
+        log.debug(f"Python dynamic library is copied from: {pylibpath}")
         copy_to(pylibpath, pjoin(dirtocopy, os.path.basename(pylibpath)))
         # Copy pythonXX.zip
-        pyzipname = pylib + ".zip"
+        pyzipname = f"{pylib}.zip"
         pyzippath = pjoin(pyroot, pyzipname)
         if os.path.exists(pyzippath):
             copy_to(pyzippath, pjoin(dirtocopy, pyzipname))
@@ -966,7 +968,7 @@ class buildembedded(Command):
         else:
             sourcename = "hg.exe" if iswindows else "hg"
         targetname = "hg.exe" if iswindows else "hg"
-        log.debug("copying main mercurial binary from %s" % bindir)
+        log.debug(f"copying main mercurial binary from {bindir}")
         copy_to(pjoin(bindir, sourcename), pjoin(dirtocopy, targetname))
         # On Windows, debuginfo is not embedded, but stored as .pdb.
         # Copy it for better debugging.
@@ -1099,7 +1101,7 @@ class buildpyzip(Command):
 
                 def process_top_level(top):
                     for name in os.listdir(top):
-                        if name == "setup.py" or name == "__pycache__":
+                        if name in ["setup.py", "__pycache__"]:
                             continue
                         path = pjoin(top, name)
                         if name == "src" and os.path.isdir(path):
@@ -1162,7 +1164,7 @@ class hginstall(install):
         # Screen out egg related commands to prevent egg generation.  But allow
         # mercurial.egg-info generation, since that is part of modern
         # packaging.
-        excl = set(["bdist_egg"])
+        excl = {"bdist_egg"}
         return filter(lambda x: x not in excl, install.get_sub_commands(self))
 
 
@@ -1188,10 +1190,7 @@ class hginstalllib(install_lib):
                 st = os.stat(src)
                 # Persist executable bit (apply it to group and other if user
                 # has it)
-                if st[stat.ST_MODE] & stat.S_IXUSR:
-                    setmode = int("0755", 8)
-                else:
-                    setmode = int("0644", 8)
+                setmode = int("0755", 8) if st[stat.ST_MODE] & stat.S_IXUSR else int("0644", 8)
                 m = stat.S_IMODE(st[stat.ST_MODE])
                 m = (m & ~int("0777", 8)) | setmode
                 os.chmod(dst, m)
@@ -1260,7 +1259,7 @@ class hginstallscripts(install_scripts):
             rest = self.install_dir[len(common) :]
             uplevel = len([n for n in os.path.split(rest) if n])
 
-            libdir = uplevel * (".." + os.sep) + self.install_lib[len(common) :]
+            libdir = uplevel * f"..{os.sep}" + self.install_lib[len(common) :]
 
         for outfile in self.outfiles:
             with open(outfile, "rb") as fp:
@@ -1340,9 +1339,7 @@ packages = [
 ]
 
 if havefb:
-    packages.append("edenscm.mercurial.fb")
-    packages.append("edenscm.mercurial.fb.mergedriver")
-
+    packages.extend(("edenscm.mercurial.fb", "edenscm.mercurial.fb.mergedriver"))
 common_depends = [
     "edenscm/mercurial/bitmanipulation.h",
     "edenscm/mercurial/compat.h",
@@ -1354,9 +1351,7 @@ def get_env_path_list(var_name, default=None):
     """Get a path list from an environment variable.  The variable is parsed as
     a colon-separated list."""
     value = os.environ.get(var_name)
-    if not value:
-        return default
-    return value.split(os.path.pathsep)
+    return value.split(os.path.pathsep) if value else default
 
 
 def filter_existing_dirs(dirs):
@@ -1408,24 +1403,23 @@ if library_dirs is None:
 
 extra_libs = get_env_path_list("EXTRA_LIBS", [])
 
-osutil_cflags = []
+osutil_cflags = [
+    f"-DHAVE_{func.upper()}"
+    for plat, func in [("bsd", "setproctitle")]
+    if re.search(plat, sys.platform) and hasfunction(new_compiler(), func)
+]
 
-# platform specific macros
-for plat, func in [("bsd", "setproctitle")]:
-    if re.search(plat, sys.platform) and hasfunction(new_compiler(), func):
-        osutil_cflags.append("-DHAVE_%s" % func.upper())
 
-if "linux" in sys.platform and cancompile(
-    new_compiler(),
-    """
+havefanotify = bool(
+    "linux" in sys.platform
+    and cancompile(
+        new_compiler(),
+        """
      #include <fcntl.h>
      #include <sys/fanotify.h>
      int main() { return fanotify_init(0, 0); }""",
-):
-    havefanotify = True
-else:
-    havefanotify = False
-
+    )
+)
 
 extmodules = [
     Extension(
@@ -1600,10 +1594,8 @@ try:
         def __init__(self, *args, **kwargs):
             mingw32compilerclass.__init__(self, *args, **kwargs)
             for i in "compiler compiler_so linker_exe linker_so".split():
-                try:
+                with contextlib.suppress(ValueError):
                     getattr(self, i).remove("-mno-cygwin")
-                except ValueError:
-                    pass
 
     cygwinccompiler.Mingw32CCompiler = HackedMingw32CCompiler
 except ImportError:
@@ -1669,8 +1661,9 @@ if os.name == "nt":
     setupversion = version.split("+", 1)[0]
 
 if sys.platform == "darwin" and os.path.exists("/usr/bin/xcodebuild"):
-    version = runcmd(["/usr/bin/xcodebuild", "-version"], {})[1].splitlines()
-    if version:
+    if version := runcmd(["/usr/bin/xcodebuild", "-version"], {})[
+        1
+    ].splitlines():
         version = version[0]
         version = version.decode("utf-8")
         xcode4 = version.startswith("Xcode") and StrictVersion(
@@ -1760,13 +1753,14 @@ hgmainfeatures = (
             [
                 "python3",
                 "buildinfo" if needbuildinfo else None,
-                "with_chg" if not iswindows else None,
+                None if iswindows else "with_chg",
                 "fb" if havefb else None,
             ],
         )
     ).strip()
     or None
 )
+
 rustextbinaries = [
     RustBinary(
         "hgmain",

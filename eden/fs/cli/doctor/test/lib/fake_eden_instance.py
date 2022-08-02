@@ -45,8 +45,8 @@ class FakeEdenInstance:
     ) -> None:
         self._tmp_dir = tmp_dir
         self._status = status
-        self._build_info = build_info if build_info else {}
-        self._config = config if config else {}
+        self._build_info = build_info or {}
+        self._config = config or {}
         self._fake_client = FakeClient()
 
         self._eden_dir = Path(self._tmp_dir) / "eden"
@@ -230,16 +230,14 @@ class FakeEdenInstance:
         return self._fake_client
 
     def get_checkouts(self) -> List[EdenCheckout]:
-        results: List[EdenCheckout] = []
-        for mount_path, checkout in self._checkouts_by_path.items():
-            results.append(
-                EdenCheckout(
-                    typing.cast(EdenInstance, self),
-                    Path(mount_path),
-                    Path(checkout.state_dir),
-                )
+        return [
+            EdenCheckout(
+                typing.cast(EdenInstance, self),
+                Path(mount_path),
+                Path(checkout.state_dir),
             )
-        return results
+            for mount_path, checkout in self._checkouts_by_path.items()
+        ]
 
     def get_config_value(self, key: str, default: str) -> str:
         return self._config.get(key, default)

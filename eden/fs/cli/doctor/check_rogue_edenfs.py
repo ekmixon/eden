@@ -75,10 +75,7 @@ def find_rogue_processes(
             )
             continue
 
-        for info in info_list:
-            if info.pid != lock_pid:
-                rogue_processes.append(info)
-
+        rogue_processes.extend(info for info in info_list if info.pid != lock_pid)
     return rogue_processes
 
 

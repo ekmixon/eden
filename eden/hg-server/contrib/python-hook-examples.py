@@ -27,9 +27,6 @@ def diffstat(ui, repo, **kwargs):
         return
     node = kwargs["node"]
     first = repo[node].p1().node()
-    if "url" in kwargs:
-        last = repo["tip"].node()
-    else:
-        last = node
+    last = repo["tip"].node() if "url" in kwargs else node
     diff = patch.diff(repo, first, last)
     ui.write(patch.diffstat(util.iterlines(diff)))

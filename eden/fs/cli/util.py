@@ -106,9 +106,7 @@ def poll_until(
         if time.time() >= end_time:
             if timeout_ex is not None:
                 raise timeout_ex
-            raise TimeoutError(
-                "timed out waiting on function {}".format(function.__name__)
-            )
+            raise TimeoutError(f"timed out waiting on function {function.__name__}")
 
         time.sleep(interval)
 
@@ -200,11 +198,11 @@ def check_health(
         # to deduce the current status of Eden.
         return check_health_using_lockfile(config_dir)
     except Thrift.TException as ex:
-        detail = "error talking to edenfs: " + str(ex)
+        detail = f"error talking to edenfs: {str(ex)}"
         return HealthStatus(status, pid, uptime, detail)
 
     status_name = fb303_status._VALUES_TO_NAMES.get(status)
-    detail = "edenfs running (pid {}); status is {}".format(pid, status_name)
+    detail = f"edenfs running (pid {pid}); status is {status_name}"
     return HealthStatus(status, pid, uptime, detail)
 
 
@@ -222,9 +220,10 @@ def wait_for_daemon_healthy(
     def check_daemon_health() -> Optional[HealthStatus]:
         # Check the thrift status
         health_info = check_health(get_client, config_dir)
-        if health_info.is_healthy():
-            if (exclude_pid is None) or (health_info.pid != exclude_pid):
-                return health_info
+        if health_info.is_healthy() and (
+            (exclude_pid is None) or (health_info.pid != exclude_pid)
+        ):
+            return health_info
 
         # Make sure that edenfs is still running
         status = proc.poll()
@@ -233,7 +232,7 @@ def wait_for_daemon_healthy(
                 msg = "terminated with signal {}".format(-status)
             else:
                 msg = "exit status {}".format(status)
-            raise EdenStartError("edenfs exited before becoming healthy: " + msg)
+            raise EdenStartError(f"edenfs exited before becoming healthy: {msg}")
 
         # Still starting
         return None
@@ -357,9 +356,7 @@ class HgRepo(Repo):
         out_bytes = subprocess.check_output(
             cmd, cwd=self.working_dir, env=self._env, stderr=stderr_output
         )
-        # pyre-fixme[22]: The cast is redundant.
-        out = typing.cast(bytes, out_bytes)
-        return out
+        return typing.cast(bytes, out_bytes)
 
     def get_commit_hash(self, commit: str, stderr_output=None) -> str:
         out = self._run_hg(["log", "-r", commit, "-T{node}"], stderr_output)
@@ -380,9 +377,7 @@ class GitRepo(Repo):
 
     def _run_git(self, args: List[str]) -> bytes:
         cmd = ["git"] + args
-        # pyre-fixme[22]: The cast is redundant.
-        out = typing.cast(bytes, subprocess.check_output(cmd, cwd=self.source))
-        return out
+        return typing.cast(bytes, subprocess.check_output(cmd, cwd=self.source))
 
     def get_commit_hash(self, commit: str) -> str:
         out = self._run_git(["rev-parse", commit])
@@ -437,10 +432,7 @@ def _get_git_repo(path: str) -> Optional[GitRepo]:
         return GitRepo(path)
 
     git_subdir = os.path.join(path, ".git")
-    if is_git_dir(git_subdir):
-        return GitRepo(git_subdir, path)
-
-    return None
+    return GitRepo(git_subdir, path) if is_git_dir(git_subdir) else None
 
 
 def get_hg_repo(path: str) -> Optional[HgRepo]:
@@ -465,10 +457,11 @@ def get_hg_repo(path: str) -> Optional[HgRepo]:
         if ex.errno != errno.ENOENT:
             raise
 
-    if not os.path.isdir(os.path.join(hg_dir, "store")):
-        return None
-
-    return HgRepo(repo_path, working_dir)
+    return (
+        HgRepo(repo_path, working_dir)
+        if os.path.isdir(os.path.join(hg_dir, "store"))
+        else None
+    )
 
 
 def get_recas_repo(path: str) -> Optional[ReCasRepo]:
@@ -632,7 +625,7 @@ def fdatasync(fd: int) -> None:
 
 def write_file_atomically(path: Path, contents: bytes) -> None:
     "Atomically writes or replaces a file at path with the given contents."
-    tmp = path.with_suffix(".tmp" + hex(random.getrandbits(64))[2:])
+    tmp = path.with_suffix(f".tmp{hex(random.getrandbits(64))[2:]}")
     try:
         with tmp.open("xb") as f:
             f.write(contents)
@@ -708,7 +701,4 @@ def is_sandcastle() -> bool:
 
 
 def is_apple_silicon() -> bool:
-    if sys.platform == "darwin":
-        return "ARM64" in os.uname().version
-    else:
-        return False
+    return "ARM64" in os.uname().version if sys.platform == "darwin" else False

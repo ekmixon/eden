@@ -23,11 +23,7 @@ from edenscm.mercurial import dirstate, extensions
 
 def nonnormalentries(dmap):
     """Compute nonnormal entries from dirstate's dmap"""
-    res = set()
-    for f, e in dmap.iteritems():
-        if e[0] != "n" or e[3] == -1:
-            res.add(f)
-    return res
+    return {f for f, e in dmap.iteritems() if e[0] != "n" or e[3] == -1}
 
 
 def checkconsistency(ui, orig, dmap, _nonnormalset, label):

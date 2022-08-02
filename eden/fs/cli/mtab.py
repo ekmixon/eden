@@ -92,26 +92,26 @@ class LinuxMountTable(MountTable):
 
     def unmount_lazy(self, mount_point: bytes) -> bool:
         # MNT_DETACH
-        return 0 == subprocess.call(["sudo", "umount", "-l", mount_point])
+        return subprocess.call(["sudo", "umount", "-l", mount_point]) == 0
 
     def unmount_force(self, mount_point: bytes) -> bool:
         # MNT_FORCE
-        return 0 == subprocess.call(["sudo", "umount", "-f", mount_point])
+        return subprocess.call(["sudo", "umount", "-f", mount_point]) == 0
 
     def create_bind_mount(self, source_path, dest_path) -> bool:
-        return 0 == subprocess.check_call(
-            ["sudo", "mount", "-o", "bind", source_path, dest_path]
+        return (
+            subprocess.check_call(
+                ["sudo", "mount", "-o", "bind", source_path, dest_path]
+            )
+            == 0
         )
 
 
 def parse_macos_mount_output(contents: bytes) -> List[MountInfo]:
     mounts = []
     for line in contents.splitlines():
-        m = re.match(b"^(\\S+) on (.+) \\(([^,]+),.*\\)$", line)
-        if m:
-            mounts.append(
-                MountInfo(device=m.group(1), mount_point=m.group(2), vfstype=m.group(3))
-            )
+        if m := re.match(b"^(\\S+) on (.+) \\(([^,]+),.*\\)$", line):
+            mounts.append(MountInfo(device=m[1], mount_point=m[2], vfstype=m[3]))
     return mounts
 
 
@@ -149,6 +149,4 @@ class NopMountTable(MountTable):
 def new() -> MountTable:
     if "linux" in sys.platform:
         return LinuxMountTable()
-    if sys.platform == "darwin":
-        return MacOSMountTable()
-    return NopMountTable()
+    return MacOSMountTable() if sys.platform == "darwin" else NopMountTable()

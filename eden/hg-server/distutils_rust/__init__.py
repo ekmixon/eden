@@ -73,20 +73,17 @@ class RustExtension(object):
     def dstnametmp(self):
         platform = distutils.util.get_platform()
         if platform.startswith("win-"):
-            name = self.name + ".dll"
+            name = f"{self.name}.dll"
         elif platform.startswith("macosx"):
-            name = "lib" + self.name + ".dylib"
+            name = f"lib{self.name}.dylib"
         else:
-            name = "lib" + self.name + ".so"
+            name = f"lib{self.name}.so"
         return name
 
     @property
     def dstname(self):
         platform = distutils.util.get_platform()
-        if platform.startswith("win-"):
-            name = self.name + ".pyd"
-        else:
-            name = self.name + ".so"
+        name = f"{self.name}.pyd" if platform.startswith("win-") else f"{self.name}.so"
         return name
 
 
@@ -110,16 +107,13 @@ class RustBinary(object):
     @property
     def dstnametmp(self):
         platform = distutils.util.get_platform()
-        if platform.startswith("win-"):
-            return self.name + ".exe"
-        else:
-            return self.name
+        return f"{self.name}.exe" if platform.startswith("win-") else self.name
 
     @property
     def dstname(self):
         platform = distutils.util.get_platform()
         if platform.startswith("win-"):
-            return self.final_name + ".exe"
+            return f"{self.final_name}.exe"
         else:
             return self.final_name
 
@@ -190,25 +184,25 @@ class BuildRustExt(distutils.core.Command):
     def get_output_filename(self, target):
         """Returns the filename of the build output."""
         if target.type == "library":
-            if self.inplace:
-                # the inplace option requires to find the package directory
-                # using the build_py command for that
-                build_py = self.get_finalized_command("build_py")
-                return os.path.join(
-                    build_py.get_package_dir(target.package), target.dstname
-                )
-            else:
+            if not self.inplace:
                 return os.path.join(
                     os.path.join(self.build_lib, *target.package.split(".")),
                     target.dstname,
                 )
+            # the inplace option requires to find the package directory
+            # using the build_py command for that
+            build_py = self.get_finalized_command("build_py")
+            return os.path.join(
+                build_py.get_package_dir(target.package), target.dstname
+            )
         elif target.type == "binary":
             return os.path.join(self.build_exe, target.dstname)
         else:
             raise distutils.errors.CompileError("Unknown Rust target type")
 
     def write_cargo_config(self):
-        config = """
+        config = (
+            """
 # On OS X targets, configure the linker to perform dynamic lookup of undefined
 # symbols.  This allows the library to be used as a Python extension.
 
@@ -225,21 +219,22 @@ rustflags = ["-C", "link-args=-fuse-ld=gold"]
 
 [build]
 """
-        config += 'target-dir = "{}"\n'.format(self.get_cargo_target())
+            + f'target-dir = "{self.get_cargo_target()}"\n'
+        )
+
         paths = self.rust_binary_paths()
         for key in ["rustc", "rustdoc"]:
             if key in paths:
-                config += '{} = "{}"\n'.format(key, paths[key])
+                config += f'{key} = "{paths[key]}"\n'
 
-        vendored_path = self.rust_vendored_crate_path()
-        if vendored_path:
+        if vendored_path := self.rust_vendored_crate_path():
             config += """
 [source.crates-io]
 replace-with = "vendored-sources"
 
 [source.vendored-sources]
 """
-            config += 'directory = "{}"\n'.format(vendored_path)
+            config += f'directory = "{vendored_path}"\n'
 
         if os.name == "nt":
             config = config.replace("\\", "\\\\")
@@ -272,8 +267,7 @@ replace-with = "vendored-sources"
         env = os.environ.copy()
         env["LIB_DIRS"] = os.path.abspath(self.build_temp)
 
-        rc = subprocess.call(cmd, env=env)
-        if rc:
+        if rc := subprocess.call(cmd, env=env):
             raise distutils.errors.CompileError(
                 "compilation of Rust target '%s' failed" % target.name
             )
@@ -295,25 +289,22 @@ replace-with = "vendored-sources"
                     retry += 1
                     if retry > 5:
                         raise
-                    else:
-                        distutils.log.warn("Retrying setting long path on %s" % src)
-                        continue
+                    distutils.log.warn(f"Retrying setting long path on {src}")
+                    continue
                 else:
                     break
 
         dest = self.get_output_filename(target)
-        try:
+        with contextlib.suppress(OSError):
             os.makedirs(os.path.dirname(dest))
-        except OSError:
-            pass
-        desttmp = dest + ".tmp"
+        desttmp = f"{dest}.tmp"
         shutil.copy(src, desttmp)
         shutil.move(desttmp, dest)
 
         # Copy pdb debug info.
-        pdbsrc = src[:-4] + ".pdb"
+        pdbsrc = f"{src[:-4]}.pdb"
         if os.path.exists(pdbsrc):
-            pdbdest = dest[:-4] + ".pdb"
+            pdbdest = f"{dest[:-4]}.pdb"
             shutil.copy(pdbsrc, pdbdest)
 
     def set_long_paths_manifest(self, fname):
@@ -341,8 +332,8 @@ replace-with = "vendored-sources"
         distutils.log.debug(
             "LongPathsAware manifest written into tempfile: %s", manfname
         )
-        inputresource = "-inputresource:%s;#1" % fname
-        outputresource = "-outputresource:%s;#1" % fname
+        inputresource = f"-inputresource:{fname};#1"
+        outputresource = f"-outputresource:{fname};#1"
         command = [
             "mt.exe",
             "-nologo",

@@ -38,10 +38,11 @@ helptable = help.helptable
 level2mark = ['"', "=", "-", ".", "#"]
 reservedmarks = ['"']
 
-mark2level = {}
-for m, l in zip(level2mark, range(len(level2mark))):
-    if m not in reservedmarks:
-        mark2level[m] = l
+mark2level = {
+    m: l
+    for m, l in zip(level2mark, range(len(level2mark)))
+    if m not in reservedmarks
+}
 
 initlevel_topic = 0
 initlevel_cmd = 1
@@ -107,7 +108,7 @@ def checkhghelps(ui):
     for names, sec, doc in helptable:
         if callable(doc):
             doc = doc(ui)
-        errorcnt += checkseclevel(ui, doc, "%s help topic" % names[0], initlevel_topic)
+        errorcnt += checkseclevel(ui, doc, f"{names[0]} help topic", initlevel_topic)
 
     errorcnt += checkcmdtable(ui, table, "%s command", initlevel_cmd)
 
@@ -119,10 +120,9 @@ def checkhghelps(ui):
         if not mod.__doc__:
             ui.note(("skip checking %s extension: no help document\n") % name)
             continue
-        errorcnt += checkseclevel(ui, mod.__doc__, "%s extension" % name, initlevel_ext)
+        errorcnt += checkseclevel(ui, mod.__doc__, f"{name} extension", initlevel_ext)
 
-        cmdtable = getattr(mod, "cmdtable", None)
-        if cmdtable:
+        if cmdtable := getattr(mod, "cmdtable", None):
             errorcnt += checkcmdtable(
                 ui, cmdtable, "%%s command of %s extension" % name, initlevel_ext_cmd
             )
@@ -138,7 +138,7 @@ def checkfile(ui, filename, initlevel):
             doc = fp.read()
 
     ui.note(("checking input from %s with initlevel %d\n") % (filename, initlevel))
-    return checkseclevel(ui, doc, "input from %s" % filename, initlevel)
+    return checkseclevel(ui, doc, f"input from {filename}", initlevel)
 
 
 def main():
@@ -213,9 +213,8 @@ option.
     if options.file:
         if checkfile(ui, options.file, options.initlevel):
             sys.exit(1)
-    else:
-        if checkhghelps(ui):
-            sys.exit(1)
+    elif checkhghelps(ui):
+        sys.exit(1)
 
 
 if __name__ == "__main__":

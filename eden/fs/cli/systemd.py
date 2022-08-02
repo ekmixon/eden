@@ -151,7 +151,7 @@ class SystemdEnvironmentFile:
     def _validate_entry(cls, name: bytes, value: bytes) -> None:
         if not name:
             raise VariableNameError("Variables must have a non-empty name")
-        if name[0:1].isdigit():
+        if name[:1].isdigit():
             raise VariableNameError("Variable names must not begin with a digit")
         for c in name:
             if c in cls._whitespace_characters:
@@ -162,8 +162,9 @@ class SystemdEnvironmentFile:
                 )
             if c < 0x20:
                 raise VariableNameError(
-                    f"Variable names must not contain any control characters"
+                    "Variable names must not contain any control characters"
                 )
+
             if c < 0x80 and c not in cls._name_characters:
                 offending_character = bytes([c]).decode("utf-8")
                 raise VariableNameError(
@@ -233,17 +234,13 @@ class _Scanner:
 
     def __scan_while(self, scan_predicate: typing.Callable[[int], bool]) -> bytes:
         begin_index = self.__index
-        while not self.at_eof:
-            if not scan_predicate(self.__input[self.__index]):
-                break
+        while not self.at_eof and scan_predicate(self.__input[self.__index]):
             self.__index += 1
         end_index = self.__index
         return self.__input[begin_index:end_index]
 
     def __skip_while(self, skip_predicate: typing.Callable[[int], bool]) -> None:
-        while not self.at_eof:
-            if not skip_predicate(self.__input[self.__index]):
-                break
+        while not self.at_eof and skip_predicate(self.__input[self.__index]):
             self.__index += 1
 
 
@@ -279,9 +276,11 @@ class _EnvironmentFileParser(_Scanner):
             return None
         self.skip_whitespace()
         value = self.parse_entry_value()
-        if not SystemdEnvironmentFile._is_valid_entry(name, value):
-            return None
-        return (name, value)
+        return (
+            (name, value)
+            if SystemdEnvironmentFile._is_valid_entry(name, value)
+            else None
+        )
 
     def parse_entry_name_and_equal_sign(self) -> typing.Optional[bytes]:
         name = bytearray([self.scan_one_byte()])
@@ -353,10 +352,9 @@ class _EnvironmentFileParser(_Scanner):
                 return
             elif c in self.whitespace_characters:
                 scanned = self.scan_while_any(self.whitespace_characters)
-                is_trailing_whitespace = (
+                if is_trailing_whitespace := (
                     self.at_eof or self.peek_one_byte() in self.newline_characters
-                )
-                if is_trailing_whitespace:
+                ):
                     return
                 out_value.append(c)
                 out_value.extend(scanned)
@@ -386,9 +384,7 @@ class _EnvironmentFileParser(_Scanner):
 
 def _truncated_at_null_byte(data: bytes) -> bytes:
     end_of_file_index = data.find(b"\x00")
-    if end_of_file_index == -1:
-        return data
-    return data[:end_of_file_index]
+    return data if end_of_file_index == -1 else data[:end_of_file_index]
 
 
 async def print_service_status_using_systemctl_for_diagnostics_async(

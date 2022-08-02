@@ -21,6 +21,6 @@ class EdenClientTest(unittest.IsolatedAsyncioTestCase):
             ex = cm.exception
             self.assertEqual(sockname, ex.socket_path)
             self.assertEqual(
-                "edenfs daemon does not appear to be running: tried " + sockname,
+                f"edenfs daemon does not appear to be running: tried {sockname}",
                 str(ex),
             )

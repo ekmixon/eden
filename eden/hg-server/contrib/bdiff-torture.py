@@ -76,11 +76,8 @@ def test(a, b):
 
 
 def rndtest(size, noise):
-    a = []
     src = "                aaaaaaaabbbbccd"
-    for x in xrange(size):
-        a.append(src[random.randint(0, len(src) - 1)])
-
+    a = [src[random.randint(0, len(src) - 1)] for _ in xrange(size)]
     while True:
         b = [c for c in a if random.randint(0, 99) > noise]
         b2 = []

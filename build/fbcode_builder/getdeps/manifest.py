@@ -152,7 +152,7 @@ def validate_section(file_name, section, config):
     section_def = SCHEMA.get(section)
     if not section_def:
         for name in ALLOWED_EXPR_SECTIONS:
-            if section.startswith(name + "."):
+            if section.startswith(f"{name}."):
                 # Verify that the conditional parses, but discard it
                 try:
                     parse_conditional_section_name(section, name)
@@ -164,15 +164,14 @@ def validate_section(file_name, section, config):
                 section_def = SCHEMA.get(name)
                 canonical_section_name = name
                 break
-        if not section_def:
-            raise Exception(
-                "manifest file %s contains unknown section '%s'" % (file_name, section)
-            )
     else:
         canonical_section_name = section
 
-    allowed_fields = section_def.get("fields")
-    if allowed_fields:
+    if not section_def:
+        raise Exception(
+            "manifest file %s contains unknown section '%s'" % (file_name, section)
+        )
+    if allowed_fields := section_def.get("fields"):
         validate_allowed_fields(file_name, section, config, allowed_fields)
     elif not section_def.get("allow_values", True):
         validate_allow_values(file_name, section, config)
@@ -197,10 +196,11 @@ class ManifestParser(object):
             config.read_file(fp)
 
         # validate against the schema
-        seen_sections = set()
+        seen_sections = {
+            validate_section(file_name, section, config)
+            for section in config.sections()
+        }
 
-        for section in config.sections():
-            seen_sections.add(validate_section(file_name, section, config))
 
         for section in SCHEMA.keys():
             section_def = SCHEMA[section]
@@ -209,9 +209,9 @@ class ManifestParser(object):
                 and section not in seen_sections
             ):
                 raise Exception(
-                    "manifest file %s is missing required section %s"
-                    % (file_name, section)
+                    f"manifest file {file_name} is missing required section {section}"
                 )
+
 
         self._config = config
         self.name = config.get("manifest", "name")
@@ -230,11 +230,8 @@ class ManifestParser(object):
 
         for s in self._config.sections():
             if s == section:
-                if self._config.has_option(s, key):
-                    return self._config.get(s, key)
-                return defval
-
-            if s.startswith(section + "."):
+                return self._config.get(s, key) if self._config.has_option(s, key) else defval
+            if s.startswith(f"{section}."):
                 expr = parse_conditional_section_name(s, section)
                 if not expr.eval(ctx):
                     continue
@@ -256,7 +253,7 @@ class ManifestParser(object):
 
         for s in self._config.sections():
             if s != section:
-                if not s.startswith(section + "."):
+                if not s.startswith(f"{section}."):
                     continue
                 expr = parse_conditional_section_name(s, section)
                 if not expr.eval(ctx):
@@ -266,7 +263,7 @@ class ManifestParser(object):
                 if value is None:
                     args.append(field)
                 else:
-                    args.append("%s=%s" % (field, value))
+                    args.append(f"{field}={value}")
         return args
 
     def get_section_as_ordered_pairs(self, section, ctx=None):
@@ -277,7 +274,7 @@ class ManifestParser(object):
 
         for s in self._config.sections():
             if s != section:
-                if not s.startswith(section + "."):
+                if not s.startswith(f"{section}."):
                     continue
                 expr = parse_conditional_section_name(s, section)
                 if not expr.eval(ctx):
@@ -294,7 +291,7 @@ class ManifestParser(object):
 
         for s in self._config.sections():
             if s != section:
-                if not s.startswith(section + "."):
+                if not s.startswith(f"{section}."):
                     continue
                 expr = parse_conditional_section_name(s, section)
                 if not expr.eval(ctx):
@@ -386,14 +383,12 @@ class ManifestParser(object):
             if package_fetcher.packages_are_installed():
                 return package_fetcher
 
-        repo_url = self.get("git", "repo_url", ctx=ctx)
-        if repo_url:
+        if repo_url := self.get("git", "repo_url", ctx=ctx):
             rev = self.get("git", "rev")
             depth = self.get("git", "depth")
             return GitFetcher(build_options, self, repo_url, rev, depth)
 
-        url = self.get("download", "url", ctx=ctx)
-        if url:
+        if url := self.get("download", "url", ctx=ctx):
             # We need to defer this import until now to avoid triggering
             # a cycle when the facebook/__init__.py is loaded.
             try:
@@ -410,7 +405,7 @@ class ManifestParser(object):
                 )
 
         raise KeyError(
-            "project %s has no fetcher configuration matching %s" % (self.name, ctx)
+            f"project {self.name} has no fetcher configuration matching {ctx}"
         )
 
     def create_builder(  # noqa:C901
@@ -436,14 +431,14 @@ class ManifestParser(object):
             subdir = self.get("build", "subdir", None, ctx=ctx)
             if subdir is not None:
                 build_dir = os.path.join(build_dir, subdir)
-            print("build_dir is %s" % build_dir)  # just to quiet lint
+            print(f"build_dir is {build_dir}")
 
-        if builder == "make" or builder == "cmakebootstrap":
+        if builder in ["make", "cmakebootstrap"]:
             build_args = self.get_section_as_args("make.build_args", ctx)
             install_args = self.get_section_as_args("make.install_args", ctx)
             test_args = self.get_section_as_args("make.test_args", ctx)
-            if builder == "cmakebootstrap":
-                return CMakeBootStrapBuilder(
+            return (
+                CMakeBootStrapBuilder(
                     build_options,
                     ctx,
                     self,
@@ -454,8 +449,8 @@ class ManifestParser(object):
                     install_args,
                     test_args,
                 )
-            else:
-                return MakeBuilder(
+                if builder == "cmakebootstrap"
+                else MakeBuilder(
                     build_options,
                     ctx,
                     self,
@@ -466,6 +461,7 @@ class ManifestParser(object):
                     install_args,
                     test_args,
                 )
+            )
 
         if builder == "autoconf":
             args = self.get_section_as_args("autoconf.args", ctx)
@@ -547,7 +543,7 @@ class ManifestParser(object):
         if builder == "OpenNSA":
             return OpenNSABuilder(build_options, ctx, self, src_dir, inst_dir)
 
-        raise KeyError("project %s has no known builder" % (self.name))
+        raise KeyError(f"project {self.name} has no known builder")
 
 
 class ManifestContext(object):
@@ -574,9 +570,7 @@ class ManifestContext(object):
         return ManifestContext(dict(self.ctx_dict))
 
     def __str__(self):
-        s = ", ".join(
-            "%s=%s" % (key, value) for key, value in sorted(self.ctx_dict.items())
-        )
+        s = ", ".join(f"{key}={value}" for key, value in sorted(self.ctx_dict.items()))
         return "{" + s + "}"
 
 

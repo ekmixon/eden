@@ -26,9 +26,7 @@ def tabulate(
 
     def label(name) -> str:
         label = (header_labels or {}).get(name, "")
-        if label:
-            return label
-        return str(name.upper())
+        return label or str(name.upper())
 
     def field(obj, name) -> str:
         return str(obj.get(name, ""))

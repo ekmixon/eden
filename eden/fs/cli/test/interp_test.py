@@ -27,9 +27,9 @@ class InterpolatorTest(unittest.TestCase):
         self.assertEqual("value", parser.get("section", "simple"))
         self.assertEqual("a${RECURSIVE}b", parser.get("section", "rec"))
 
-        actual = {}
-        for section in parser.sections():
-            actual[section] = dict(parser.items(section))
+        actual = {
+            section: dict(parser.items(section)) for section in parser.sections()
+        }
 
         expect = {
             "section": {"user": "wez", "simple": "value", "rec": "a${RECURSIVE}b"}

@@ -52,7 +52,7 @@ class OverlayHeader:
     def parse(cls, data: bytes, type: Optional[bytes] = None) -> "OverlayHeader":
         # A 0-length file is somewhat common on unclean reboot,
         # so use a separate exception message for this case.
-        if len(data) == 0:
+        if not data:
             raise InvalidOverlayFile("zero-sized overlay file")
         if len(data) < cls.LENGTH:
             raise InvalidOverlayFile(
@@ -441,8 +441,6 @@ class Overlay:
             os.fchmod(fd, 0o644)
             os.rename(tmp_path, file_path)
         except Exception:
-            try:
+            with contextlib.suppress(Exception):
                 os.unlink(tmp_path)
-            except Exception:
-                pass
             raise

@@ -207,10 +207,7 @@ def insert_latency_record(
     percentile_table = {"avg": 0, "p50": 1, "p90": 2, "p99": 3}
 
     def with_microsecond_units(i: int) -> str:
-        if i:
-            return str(i) + " \u03BCs"  # mu for micro
-        else:
-            return str(i) + "   "
+        return str(i) + " \u03BCs" if i else f"{i}   "
 
     if operation not in table.keys():
         # pyre-ignore[6]: T38220626
@@ -220,11 +217,7 @@ def insert_latency_record(
         ]
 
     pct_index = percentile_table[percentile]
-    if period:
-        period_index = period_table[period]
-    else:
-        period_index = len(period_table)
-
+    period_index = period_table[period] if period else len(period_table)
     table[operation][pct_index][period_index] = with_microsecond_units(value)
 
 
@@ -381,7 +374,7 @@ class MononokeBackingStoreLatencyCmd(Subcmd):
 
 
 def backing_store_latency(store: str, args: argparse.Namespace) -> int:
-    TITLE = "Latency of {} backing store operations in EdenFs".format(store)
+    TITLE = f"Latency of {store} backing store operations in EdenFs"
     stats_print.write_heading(TITLE, sys.stdout)
 
     instance = cmd_util.get_eden_instance(args)
@@ -398,7 +391,7 @@ def get_store_latency(counters: DiagInfoCounters, store: str) -> Table2D:
     table: Table2D = {}
 
     for key in counters:
-        if key.startswith("store.{}".format(store)) and key.find(".count") == -1:
+        if key.startswith(f"store.{store}") and key.find(".count") == -1:
             tokens = key.split(".")
             method = tokens[2]
             percentile = tokens[3]
@@ -491,7 +484,7 @@ def get_counter_table(counters: DiagInfoCounters, prefix: List, suffix: List) ->
 
     for key in counters:
         tags = key.split(".")
-        if tags[-len(suffix) :] == suffix and tags[0 : len(prefix)] == prefix:
+        if tags[-len(suffix) :] == suffix and tags[: len(prefix)] == prefix:
             TIME_SUFFIXES = (".60", ".600", ".3600", "")
             row_name = ".".join(tags[len(prefix) : -len(suffix)])
             table[row_name] = [counters[key + suffix] for suffix in TIME_SUFFIXES]

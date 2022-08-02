@@ -14,8 +14,7 @@ from edenscm.mercurial.node import hex
 
 
 def getremote(ui, path):
-    remote = hg.peer(ui, {}, path)
-    return remote
+    return hg.peer(ui, {}, path)
 
 
 def runlookup(ui, remote, name):

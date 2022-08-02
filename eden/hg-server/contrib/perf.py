@@ -152,7 +152,7 @@ elif safehasattr(cmdutil, "command"):
 
         def command(name, options=(), synopsis=None, norepo=False):
             if norepo:
-                commands.norepo += " %s" % " ".join(parsealiases(name))
+                commands.norepo += f' {" ".join(parsealiases(name))}'
             return _command(name, list(options), synopsis)
 
 
@@ -167,7 +167,7 @@ else:
             else:
                 cmdtable[name] = func, list(options)
             if norepo:
-                commands.norepo += " %s" % " ".join(parsealiases(name))
+                commands.norepo += f' {" ".join(parsealiases(name))}'
             return func
 
         return decorator
@@ -188,9 +188,7 @@ except (ImportError, AttributeError):
 
 
 def getlen(ui):
-    if ui.configbool("perf", "stub", False):
-        return lambda x: 1
-    return len
+    return (lambda x: 1) if ui.configbool("perf", "stub", False) else len
 
 
 def gettimer(ui, opts=None):
@@ -208,15 +206,12 @@ def gettimer(ui, opts=None):
     # redirect all to stderr unless buffer api is in use
     if not ui._buffers:
         ui = ui.copy()
-        uifout = safeattrsetter(ui, "fout", ignoremissing=True)
-        if uifout:
+        if uifout := safeattrsetter(ui, "fout", ignoremissing=True):
             # for "historical portability":
             # ui.fout/ferr have been available since 1.9 (or 4e1ccd4c2b6d)
             uifout.set(ui.ferr)
 
-    # get a formatter
-    uiformatter = getattr(ui, "formatter", None)
-    if uiformatter:
+    if uiformatter := getattr(ui, "formatter", None):
         fm = uiformatter("perf", opts)
     else:
         # for "historical portability":
@@ -224,15 +219,14 @@ def gettimer(ui, opts=None):
         # available since 2.2 (or ae5f92e154d3)
         from edenscm.mercurial import node
 
+
+
         class defaultformatter(object):
             """Minimized composition of baseformatter and plainformatter"""
 
             def __init__(self, ui, topic, opts):
                 self._ui = ui
-                if ui.debugflag:
-                    self.hexfunc = node.hex
-                else:
-                    self.hexfunc = node.short
+                self.hexfunc = node.hex if ui.debugflag else node.short
 
             def __nonzero__(self):
                 return False
@@ -257,6 +251,7 @@ def gettimer(ui, opts=None):
 
             def end(self):
                 pass
+
 
         fm = defaultformatter(ui, "perf", opts)
 
@@ -364,10 +359,7 @@ def safeattrsetter(obj, name, ignoremissing=False):
 
 def getsvfs(repo):
     """Return appropriate object to access files under .hg/store"""
-    # for "historical portability":
-    # repo.svfs has been available since 2.3 (or 7034365089bf)
-    svfs = getattr(repo, "svfs", None)
-    if svfs:
+    if svfs := getattr(repo, "svfs", None):
         return svfs
     else:
         return getattr(repo, "sopener")
@@ -375,13 +367,7 @@ def getsvfs(repo):
 
 def getvfs(repo):
     """Return appropriate object to access files under .hg"""
-    # for "historical portability":
-    # repo.vfs has been available since 2.3 (or 7034365089bf)
-    vfs = getattr(repo, "vfs", None)
-    if vfs:
-        return vfs
-    else:
-        return getattr(repo, "opener")
+    return vfs if (vfs := getattr(repo, "vfs", None)) else getattr(repo, "opener")
 
 
 # utilities to clear cache
@@ -663,7 +649,7 @@ def perfbundleread(ui, repo, bundlepath, **opts):
         elif isinstance(bundle, streamclone.streamcloneapplier):
             raise error.Abort("stream clone bundles not supported")
         else:
-            raise error.Abort("unhandled bundle type: %s" % type(bundle))
+            raise error.Abort(f"unhandled bundle type: {type(bundle)}")
 
     for fn, title in benches:
         timer, fm = gettimer(ui, opts)
@@ -862,10 +848,10 @@ def perfstartup(ui, repo, **opts):
 
     def d():
         if os.name != "nt":
-            os.system("HGRCPATH= %s version -q > /dev/null" % cmd)
+            os.system(f"HGRCPATH= {cmd} version -q > /dev/null")
         else:
             os.environ["HGRCPATH"] = " "
-            os.system("%s version -q > NUL" % cmd)
+            os.system(f"{cmd} version -q > NUL")
 
     timer(d)
     fm.end()
@@ -1044,14 +1030,14 @@ def perfdiffwd(ui, repo, **opts):
     }
 
     for diffopt in ("", "w", "b", "B", "wB"):
-        opts = dict((options[c], "1") for c in diffopt)
+        opts = {options[c]: "1" for c in diffopt}
 
         def d():
             ui.pushbuffer()
             commands.diff(ui, repo, **opts)
             ui.popbuffer()
 
-        title = "diffopts: %s" % (diffopt and ("-" + diffopt) or "none")
+        title = f'diffopts: {diffopt and f"-{diffopt}" or "none"}'
         timer(d, title)
     fm.end()
 
@@ -1138,11 +1124,7 @@ def perflrucache(
     mixedops = []
     for i in xrange(mixed):
         r = random.randint(0, 100)
-        if r < mixedgetfreq:
-            op = 0
-        else:
-            op = 1
-
+        op = 0 if r < mixedgetfreq else 1
         mixedops.append((op, random.randint(0, size * 2)))
 
     def domixed():

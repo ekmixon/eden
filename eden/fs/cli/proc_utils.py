@@ -105,9 +105,7 @@ class EdenFSProcess(NamedTuple):
         BuildInfo.)
         """
         info = get_build_info_from_pid(self.pid, self.eden_dir)
-        if info is None:
-            return BuildInfo()
-        return info
+        return BuildInfo() if info is None else info
 
 
 try:

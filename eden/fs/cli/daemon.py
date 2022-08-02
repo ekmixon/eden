@@ -39,9 +39,7 @@ def wait_for_process_exit(pid: int, timeout: float) -> bool:
     proc_utils: proc_utils_mod.ProcUtils = proc_utils_mod.new()
 
     def process_exited() -> Optional[bool]:
-        if not proc_utils.is_process_alive(pid):
-            return True
-        return None
+        return None if proc_utils.is_process_alive(pid) else True
 
     try:
         poll_until(process_exited, timeout=timeout)
@@ -103,8 +101,7 @@ def sigkill_process(pid: int, timeout: float = DEFAULT_SIGKILL_TIMEOUT) -> None:
 
     if not wait_for_process_exit(pid, timeout):
         raise ShutdownError(
-            "edenfs process {} did not terminate within {} seconds of "
-            "sending SIGKILL.".format(pid, timeout)
+            f"edenfs process {pid} did not terminate within {timeout} seconds of sending SIGKILL."
         )
 
 
@@ -178,7 +175,7 @@ def _start_edenfs_service(
 
 def get_edenfs_cmd(instance: EdenInstance, daemon_binary: str) -> List[str]:
     """Get the command line arguments to use to start the edenfs daemon."""
-    cmd = [
+    return [
         daemon_binary,
         "--edenfs",
         "--edenfsctlPath",
@@ -190,8 +187,6 @@ def get_edenfs_cmd(instance: EdenInstance, daemon_binary: str) -> List[str]:
         "--configPath",
         str(instance.user_config_path),
     ]
-
-    return cmd
 
 
 def prepare_edenfs_privileges(
@@ -220,9 +215,7 @@ def prepare_edenfs_privileges(
     # Depending on the sudo configuration, these may not
     # necessarily get passed through automatically even when
     # using "sudo -E".
-    for key, value in env.items():
-        sudo_cmd.append("%s=%s" % (key, value))
-
+    sudo_cmd.extend(f"{key}={value}" for key, value in env.items())
     cmd = sudo_cmd + cmd
     return cmd, env
 
@@ -302,8 +295,4 @@ def get_edenfs_environment() -> Dict[str, str]:
             eden_env[name] = value
         elif name in preserve:
             eden_env[name] = value
-        else:
-            # Drop any environment variable not matching the above cases
-            pass
-
     return eden_env

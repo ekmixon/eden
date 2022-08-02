@@ -110,7 +110,9 @@ def print_rpm_version(out: IO[bytes]) -> None:
 
 def print_os_version(out: IO[bytes]) -> None:
     version = None
-    if sys.platform == "linux":
+    if sys.platform == "darwin":
+        version = f"MacOS {platform.mac_ver()[0]}"
+    elif sys.platform == "linux":
         release_file_name = "/etc/os-release"
         if os.path.isfile(release_file_name):
             with open(release_file_name) as release_info_file:
@@ -122,8 +124,6 @@ def print_os_version(out: IO[bytes]) -> None:
                         release_info[release_info_piece] = value.strip('"')
                 if "PRETTY_NAME" in release_info:
                     version = release_info["PRETTY_NAME"]
-    elif sys.platform == "darwin":
-        version = "MacOS " + platform.mac_ver()[0]
     elif sys.platform == "win32":
         import winreg
 
@@ -134,7 +134,7 @@ def print_os_version(out: IO[bytes]) -> None:
         version = f"Windows {build[0]}"
 
     if not version:
-        version = platform.system() + " " + platform.version()
+        version = f"{platform.system()} {platform.version()}"
 
     out.write(f"OS Version              : {version}\n".encode("utf-8"))
 
@@ -156,10 +156,10 @@ def print_eden_doctor_report(instance: EdenInstance, out: IO[bytes]) -> None:
 def read_chunk(logfile: IO[bytes]) -> Generator[bytes, None, None]:
     CHUNK_SIZE = 20 * 1024
     while True:
-        data = logfile.read(CHUNK_SIZE)
-        if not data:
+        if data := logfile.read(CHUNK_SIZE):
+            yield data
+        else:
             break
-        yield data
 
 
 def print_log_file(

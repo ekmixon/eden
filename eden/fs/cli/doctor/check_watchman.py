@@ -105,7 +105,7 @@ def check_nuclide_subscriptions(
     # Note that nuclide_roots is a set, but each entry in the set
     # could appear as a root folder multiple times if the user uses multiple
     # Atom windows.
-    path_prefix = path + "/"
+    path_prefix = f"{path}/"
     connected_nuclide_roots = [
         nuclide_root
         for nuclide_root in info.nuclide_roots
@@ -169,13 +169,15 @@ def check_nuclide_subscriptions(
         missing_subscriptions = [
             sub
             for sub in missing_or_duplicate_subscriptions
-            if 0 == subscription_counts.get(sub, 0)
+            if subscription_counts.get(sub, 0) == 0
         ]
+
         duplicate_subscriptions = [
             sub
             for sub in missing_or_duplicate_subscriptions
-            if 1 < subscription_counts.get(sub, 0)
+            if subscription_counts.get(sub, 0) > 1
         ]
+
 
         output = io.StringIO()
         output.write(
@@ -205,23 +207,17 @@ def check_nuclide_subscriptions(
 
 def _get_watch_roots_for_watchman() -> Set[str]:
     js = _call_watchman(["watch-list"])
-    roots = set(js.get("roots", []))
-    return roots
+    return set(js.get("roots", []))
 
 
 def _call_watchman(args: List[str]) -> Dict:
-    full_args = ["watchman"]
-    full_args.extend(args)
+    full_args = ["watchman", *args]
     return _check_json_output(full_args)
 
 
 def _get_roots_for_nuclide() -> Optional[Set[str]]:
     connections = _check_json_output(["nuclide-connections"])
-    if isinstance(connections, list):
-        return set(connections)
-    else:
-        # connections should be a dict with an "error" property.
-        return None
+    return set(connections) if isinstance(connections, list) else None
 
 
 def _check_json_output(args: List[str]) -> Dict[str, Any]:

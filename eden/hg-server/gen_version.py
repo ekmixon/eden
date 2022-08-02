@@ -23,14 +23,14 @@ def main():
     args = ap.parse_args()
 
     if args.version and args.release:
-        sub_version = "%s_%s_%s" % (args.version, args.release, args.revision[:8])
+        sub_version = f"{args.version}_{args.release}_{args.revision[:8]}"
     elif args.revision:
         sub_version = args.revision[:8]
     else:
         # Buck does not pass in any build data info in dev builds
         sub_version = "dev"
 
-    version = "%s_%s" % (MAIN_VERSION, sub_version)
+    version = f"{MAIN_VERSION}_{sub_version}"
     versionb = version.encode("ascii")
     versionhash = struct.unpack(">Q", hashlib.sha1(versionb).digest()[:8])[0]
 

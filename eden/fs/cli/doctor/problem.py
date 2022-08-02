@@ -114,8 +114,7 @@ class ProblemFixer(ProblemTracker):
             self.fix_problem(problem)
         else:
             self.num_manual_fixes += 1
-            msg = problem.get_manual_remediation_message()
-            if msg:
+            if msg := problem.get_manual_remediation_message():
                 self._out.write(msg, end="\n\n")
 
     def fix_problem(self, problem: FixableProblem) -> None:

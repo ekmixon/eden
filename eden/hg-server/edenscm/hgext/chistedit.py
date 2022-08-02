@@ -123,7 +123,7 @@ class histeditrule(object):
         # The carets point to the changeset being folded into ("roll this
         # changeset into the changeset above").
         action = ACTION_LABELS.get(self.action, self.action)
-        h = self.ctx.hex()[0:12]
+        h = self.ctx.hex()[:12]
         r = self.ctx.rev()
         desc = self.ctx.description().splitlines()[0].strip()
         if self.action == "roll":
@@ -131,10 +131,13 @@ class histeditrule(object):
         return "#{0:<2} {1:<6} {2}:{3}   {4}".format(self.origpos, action, r, h, desc)
 
     def checkconflicts(self, other):
-        if other.pos > self.pos and other.origpos <= self.origpos:
-            if set(other.ctx.files()) & set(self.ctx.files()) != set():
-                self.conflicts.append(other)
-                return self.conflicts
+        if (
+            other.pos > self.pos
+            and other.origpos <= self.origpos
+            and set(other.ctx.files()) & set(self.ctx.files()) != set()
+        ):
+            self.conflicts.append(other)
+            return self.conflicts
 
         if other in self.conflicts:
             self.conflicts.remove(other)
@@ -303,10 +306,7 @@ def event(state, ch):
 def makecommands(rules):
     """Returns a list of commands consumable by histedit --commands based on
     our list of rules"""
-    commands = []
-    for rules in rules:
-        commands.append("{0} {1}\n".format(rules.action, rules.ctx))
-    return commands
+    return ["{0} {1}\n".format(rules.action, rules.ctx) for rules in rules]
 
 
 def addln(win, y, x, line, color=None):
@@ -418,8 +418,8 @@ pgup/K: move patch up, pgdn/J: move patch down, c: commit, q: abort
         start = state["modes"][MODE_RULES]["line_offset"]
 
         conflicts = [r.ctx for r in rules if r.conflicts]
-        if len(conflicts) > 0:
-            line = "potential conflict in %s" % ",".join(map(str, conflicts))
+        if conflicts:
+            line = f'potential conflict in {",".join(map(str, conflicts))}'
             addln(rulesscr, -1, 0, line, curses.color_pair(COLOR_WARN))
 
         for y, rule in enumerate(rules[start:]):
@@ -440,7 +440,7 @@ pgup/K: move patch up, pgdn/J: move patch down, c: commit, q: abort
     def renderstring(win, state, output):
         maxy, maxx = win.getmaxyx()
         length = min(maxy - 1, len(output))
-        for y in range(0, length):
+        for y in range(length):
             win.addstr(y, 0, output[y])
         win.noutrefresh()
 
@@ -487,51 +487,50 @@ pgup/K: move patch up, pgdn/J: move patch down, c: commit, q: abort
                 return False
             if e == E_HISTEDIT:
                 return state["rules"]
+            if e == E_RESIZE:
+                size = screen_size()
+                if size != stdscr.getmaxyx():
+                    curses.resizeterm(*size)
+
+            curmode, _ = state["mode"]
+            sizes = layout(curmode)
+            if curmode != oldmode:
+                state["page_height"] = sizes["main"][0]
+                # Adjust the view to fit the current screen size.
+                movecursor(state, state["pos"], state["pos"])
+
+            # Pack the windows against the top, each pane spread across the
+            # full width of the screen.
+            y, x = (0, 0)
+            helpwin, y, x = drawvertwin(sizes["help"], y, x)
+            mainwin, y, x = drawvertwin(sizes["main"], y, x)
+            commitwin, y, x = drawvertwin(sizes["commit"], y, x)
+
+            if e in (E_PAGEDOWN, E_PAGEUP, E_LINEDOWN, E_LINEUP):
+                if e == E_PAGEDOWN:
+                    changeview(state, +1, "page")
+                elif e == E_PAGEUP:
+                    changeview(state, -1, "page")
+                elif e == E_LINEDOWN:
+                    changeview(state, +1, "line")
+                elif e == E_LINEUP:
+                    changeview(state, -1, "line")
+
+            # start rendering
+            commitwin.erase()
+            helpwin.erase()
+            mainwin.erase()
+            if curmode == MODE_PATCH:
+                renderpatch(mainwin, state)
+            elif curmode == MODE_HELP:
+                renderstring(mainwin, state, __doc__.strip().splitlines())
             else:
-                if e == E_RESIZE:
-                    size = screen_size()
-                    if size != stdscr.getmaxyx():
-                        curses.resizeterm(*size)
-
-                curmode, _ = state["mode"]
-                sizes = layout(curmode)
-                if curmode != oldmode:
-                    state["page_height"] = sizes["main"][0]
-                    # Adjust the view to fit the current screen size.
-                    movecursor(state, state["pos"], state["pos"])
-
-                # Pack the windows against the top, each pane spread across the
-                # full width of the screen.
-                y, x = (0, 0)
-                helpwin, y, x = drawvertwin(sizes["help"], y, x)
-                mainwin, y, x = drawvertwin(sizes["main"], y, x)
-                commitwin, y, x = drawvertwin(sizes["commit"], y, x)
-
-                if e in (E_PAGEDOWN, E_PAGEUP, E_LINEDOWN, E_LINEUP):
-                    if e == E_PAGEDOWN:
-                        changeview(state, +1, "page")
-                    elif e == E_PAGEUP:
-                        changeview(state, -1, "page")
-                    elif e == E_LINEDOWN:
-                        changeview(state, +1, "line")
-                    elif e == E_LINEUP:
-                        changeview(state, -1, "line")
-
-                # start rendering
-                commitwin.erase()
-                helpwin.erase()
-                mainwin.erase()
-                if curmode == MODE_PATCH:
-                    renderpatch(mainwin, state)
-                elif curmode == MODE_HELP:
-                    renderstring(mainwin, state, __doc__.strip().splitlines())
-                else:
-                    renderrules(mainwin, state)
-                    rendercommit(commitwin, state)
-                renderhelp(helpwin, state)
-                curses.doupdate()
-                # done rendering
-                ch = stdscr.getkey()
+                renderrules(mainwin, state)
+                rendercommit(commitwin, state)
+            renderhelp(helpwin, state)
+            curses.doupdate()
+            # done rendering
+            ch = stdscr.getkey()
         except curses.error:
             pass
 
@@ -592,9 +591,7 @@ def chistedit(ui, repo, *freeargs, **opts):
                 _("%s is not an ancestor of working directory") % node.short(root)
             )
 
-        ctxs = []
-        for i, r in enumerate(revs):
-            ctxs.append(histeditrule(repo[r], i))
+        ctxs = [histeditrule(repo[r], i) for i, r in enumerate(revs)]
         rc = curses.wrapper(functools.partial(main, repo, ctxs))
         curses.echo()
         curses.endwin()

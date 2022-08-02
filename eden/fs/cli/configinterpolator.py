@@ -22,12 +22,12 @@ class EdenConfigInterpolator(configparser.Interpolation):
     """
 
     def __init__(self, defaults: Dict[str, str]) -> None:
-        self._defaults: Dict[str, str] = {}
         """ pre-construct the token name that we're going to substitute.
             eg: {"foo": "bar"} is stored as {"${foo}": "bar"} internally
         """
-        for k, v in defaults.items():
-            self._defaults["${" + k + "}"] = v
+        self._defaults: Dict[str, str] = {
+            "${" + k + "}": v for k, v in defaults.items()
+        }
 
     def _interpolate(self, value: str) -> str:
         """simple brute force replacement using the defaults that were

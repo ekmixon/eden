@@ -180,11 +180,8 @@ class DiskUsageCmd(Subcmd):
 
     def run(self, args: argparse.Namespace) -> int:
         mounts = args.mounts
-        clean = args.clean
         deep_clean = args.deep_clean
-        if deep_clean:
-            clean = True
-
+        clean = True if deep_clean else args.clean
         self.json_mode = args.json
 
         color_out = self.color_out
@@ -196,8 +193,8 @@ class DiskUsageCmd(Subcmd):
             if not instance:
                 raise subcmd_mod.CmdError("no EdenFS instance found\n")
             mounts = list(instance.get_mount_paths())
-            if not mounts:
-                raise subcmd_mod.CmdError("no EdenFS mount found\n")
+        if not mounts:
+            raise subcmd_mod.CmdError("no EdenFS mount found\n")
 
         if clean:
             self.write_ui(
@@ -374,16 +371,8 @@ space by running:
                             total += get_size(dirent.path)
                     else:
                         stat = dirent.stat(follow_symlinks=False)
-                        if sys.platform == "win32":
-                            total += stat.st_size
-                        else:
-                            # Use st_blocks as this represent the actual amount of
-                            # disk space allocated by the file, not its apparent
-                            # size.
-                            total += stat.st_blocks * 512
-                except FileNotFoundError:
-                    failed_to_check_files.append(dirent.path)
-                except PermissionError:
+                        total += stat.st_size if sys.platform == "win32" else stat.st_blocks * 512
+                except (FileNotFoundError, PermissionError):
                     failed_to_check_files.append(dirent.path)
             if failed_to_check_files:
                 pretry_failed_to_check_files = ", ".join(failed_to_check_files)
@@ -555,7 +544,7 @@ class PidCmd(Subcmd):
             print(health_info.pid)
             return 0
 
-        print("edenfs not healthy: {}".format(health_info.detail), file=sys.stderr)
+        print(f"edenfs not healthy: {health_info.detail}", file=sys.stderr)
         return 1
 
 
@@ -574,10 +563,10 @@ class StatusCmd(Subcmd):
         instance = get_eden_instance(args)
         health_info = instance.check_health(timeout=args.timeout)
         if health_info.is_healthy():
-            print("edenfs running normally (pid {})".format(health_info.pid))
+            print(f"edenfs running normally (pid {health_info.pid})")
             return 0
 
-        print("edenfs not healthy: {}".format(health_info.detail))
+        print(f"edenfs not healthy: {health_info.detail}")
         return 1
 
 
@@ -615,11 +604,7 @@ class ListCmd(Subcmd):
     @staticmethod
     def print_mounts(out: ui.Output, mount_points: Dict[Path, ListMountInfo]) -> None:
         for path, mount_info in sorted(mount_points.items()):
-            if not mount_info.configured:
-                suffix = " (unconfigured)"
-            else:
-                suffix = ""
-
+            suffix = "" if mount_info.configured else " (unconfigured)"
             if mount_info.state is None:
                 state_str = " (not mounted)"
             elif mount_info.state == MountState.RUNNING:
@@ -999,9 +984,7 @@ class StraceCmd(Subcmd):
             return f"unknown-{call.opcode}"
 
         name = call.opcodeName
-        if name.startswith("FUSE_"):
-            return name[5:].lower()
-        return name
+        return name[5:].lower() if name.startswith("FUSE_") else name
 
     def format_call(
         self,
@@ -1017,13 +1000,11 @@ class StraceCmd(Subcmd):
 
         opcodeName = self.format_opcode(call)
         argString = ""
-        if arguments:
-            argString = f"({call.nodeid}, {arguments})"
-        else:
-            argString = f"({call.nodeid})"
-        tail = ""
-        if result is not None:
-            tail = f" = {result}"
+        argString = (
+            f"({call.nodeid}, {arguments})" if arguments else f"({call.nodeid})"
+        )
+
+        tail = f" = {result}" if result is not None else ""
         return f"{call.unique} from {processName}: {opcodeName}{argString}{tail}"
 
     def format_time(self, ns: float) -> str:
@@ -1176,15 +1157,12 @@ class FsckCmd(Subcmd):
             else:
                 checker.fix_errors()
 
-            if num_errors == 0:
-                return self.EXIT_WARNINGS
-            return self.EXIT_ERRORS
+            return self.EXIT_WARNINGS if num_errors == 0 else self.EXIT_ERRORS
 
     def _report_error(self, args: argparse.Namespace, error: "fsck_mod.Error") -> None:
         print(f"{fsck_mod.ErrorLevel.get_label(error.level)}: {error}")
         if args.verbose:
-            details = error.detailed_description()
-            if details:
+            if details := error.detailed_description():
                 print("  " + "\n  ".join(details.splitlines()))
 
 
@@ -1271,8 +1249,7 @@ class MountCmd(Subcmd):
         instance = get_eden_instance(args)
         for path in args.paths:
             try:
-                exitcode = instance.mount(path, args.read_only)
-                if exitcode:
+                if exitcode := instance.mount(path, args.read_only):
                     return exitcode
             except (EdenService.EdenError, EdenNotRunningError) as ex:
                 print_stderr("error: {}", ex)
@@ -1514,13 +1491,12 @@ class StartCmd(Subcmd):
 
         # Check to see if edenfs is already running
         health_info = instance.check_health()
-        if not is_takeover:
-            if health_info.is_healthy():
-                msg = f"EdenFS is already running (pid {health_info.pid})"
-                if args.if_not_running:
-                    print(msg)
-                    return 0
-                raise subcmd_mod.CmdError(msg)
+        if not is_takeover and health_info.is_healthy():
+            msg = f"EdenFS is already running (pid {health_info.pid})"
+            if args.if_not_running:
+                print(msg)
+                return 0
+            raise subcmd_mod.CmdError(msg)
 
         if args.foreground:
             return self.start_in_foreground(instance, daemon_binary, args)
@@ -1558,11 +1534,10 @@ class StartCmd(Subcmd):
 
         if sys.platform == "win32":
             return subprocess.call(cmd, env=eden_env)
-        else:
-            os.execve(cmd[0], cmd, env=eden_env)
-            # Throw an exception just to let mypy know that we should never reach here
-            # and will never return normally.
-            raise Exception("execve should never return")
+        os.execve(cmd[0], cmd, env=eden_env)
+        # Throw an exception just to let mypy know that we should never reach here
+        # and will never return normally.
+        raise Exception("execve should never return")
 
 
 def unmount_redirections_for_path(repo_path: str) -> None:
@@ -1671,18 +1646,15 @@ class RestartCmd(Subcmd):
             assert edenfs_pid is not None
             if self.args.restart_type == RESTART_MODE_GRACEFUL:
                 return await self._graceful_restart(instance)
-            else:
-                status = await self._full_restart(instance, edenfs_pid)
-                success = status == 0
-                instance.log_sample("full_restart", success=success)
-                return status
+            status = await self._full_restart(instance, edenfs_pid)
+            success = status == 0
+            instance.log_sample("full_restart", success=success)
+            return status
         elif edenfs_pid is None:
-            # The daemon is not running
-            if args.only_if_running:
-                print("EdenFS not running; not starting EdenFS")
-                return 0
-            else:
+            if not args.only_if_running:
                 return await self._start(instance)
+            print("EdenFS not running; not starting EdenFS")
+            return 0
         else:
             if health.status == fb303_status.STARTING:
                 print(
@@ -1787,29 +1759,28 @@ class RestartCmd(Subcmd):
             raise NotImplementedError(
                 "TODO(T33122320): Implement 'eden restart --graceful'"
             )
-        else:
-            with instance.get_telemetry_logger().new_sample(
-                "graceful_restart"
-            ) as telemetry_sample:
-                # The status here is returned by the exit status of the startup
-                # logger. If this is successful, we will ensure the new process
-                # itself starts. If this was not successful, we will assume that
-                # the process didn't start up correctly and continue directly to
-                # our recovery logic.
-                status = daemon.gracefully_restart_edenfs_service(
-                    instance, daemon_binary=self.args.daemon_binary
-                )
-                success = status == 0
-                if success:
-                    print("Successful graceful restart")
-                    return 0
+        with instance.get_telemetry_logger().new_sample(
+            "graceful_restart"
+        ) as telemetry_sample:
+            # The status here is returned by the exit status of the startup
+            # logger. If this is successful, we will ensure the new process
+            # itself starts. If this was not successful, we will assume that
+            # the process didn't start up correctly and continue directly to
+            # our recovery logic.
+            status = daemon.gracefully_restart_edenfs_service(
+                instance, daemon_binary=self.args.daemon_binary
+            )
+            success = status == 0
+            if success:
+                print("Successful graceful restart")
+                return 0
 
-                # After this point, the initial graceful restart was unsuccessful.
-                # Make sure that the old process recovers. If it does not recover,
-                # run start to make sure that an EdenFS process is running.
-                return await self._recover_after_failed_graceful_restart(
-                    instance, telemetry_sample
-                )
+            # After this point, the initial graceful restart was unsuccessful.
+            # Make sure that the old process recovers. If it does not recover,
+            # run start to make sure that an EdenFS process is running.
+            return await self._recover_after_failed_graceful_restart(
+                instance, telemetry_sample
+            )
 
     async def _start(self, instance: EdenInstance) -> int:
         print("edenfs daemon is not currently running. Starting...")
@@ -1826,10 +1797,13 @@ Any programs using files or directories inside the EdenFS mounts will need to
 re-open these files after EdenFS is restarted.
 """
         )
-        if not self.args.force_restart and sys.stdin.isatty():
-            if not prompt_confirmation("Proceed?"):
-                print("Not confirmed.")
-                return 1
+        if (
+            not self.args.force_restart
+            and sys.stdin.isatty()
+            and not prompt_confirmation("Proceed?")
+        ):
+            print("Not confirmed.")
+            return 1
 
         self._do_stop(instance, old_pid, timeout=15)
         return await self._finish_restart(instance)
@@ -1979,10 +1953,7 @@ class StopCmd(Subcmd):
 
     def run(self, args: argparse.Namespace) -> int:
         instance = get_eden_instance(args)
-        if args.kill:
-            return self._kill(instance, args)
-        else:
-            return self._stop(instance, args)
+        return self._kill(instance, args) if args.kill else self._stop(instance, args)
 
     def _stop(self, instance: EdenInstance, args: argparse.Namespace) -> int:
         pid = None
@@ -2004,8 +1975,8 @@ class StopCmd(Subcmd):
                 print_stderr(f"warning: edenfs daemon is not responding: {e}")
                 if pid is None:
                     pid = check_health_using_lockfile(instance.state_dir).pid
-                    if pid is None:
-                        raise EdenNotRunningError(str(instance.state_dir)) from e
+                if pid is None:
+                    raise EdenNotRunningError(str(instance.state_dir)) from e
         except EdenNotRunningError:
             print_stderr("error: edenfs is not running")
             return SHUTDOWN_EXIT_CODE_NOT_RUNNING_ERROR
@@ -2023,7 +1994,7 @@ class StopCmd(Subcmd):
                 print_stderr("Terminated edenfs with SIGKILL.")
                 return SHUTDOWN_EXIT_CODE_TERMINATED_VIA_SIGKILL
         except ShutdownError as ex:
-            print_stderr("Error: " + str(ex))
+            print_stderr(f"Error: {str(ex)}")
             return SHUTDOWN_EXIT_CODE_ERROR
 
     def _kill(self, instance: EdenInstance, args: argparse.Namespace) -> int:
@@ -2041,15 +2012,11 @@ class StopCmd(Subcmd):
             print_stderr("Terminated edenfs with SIGKILL.")
             return SHUTDOWN_EXIT_CODE_NORMAL
         except ShutdownError as ex:
-            print_stderr("Error: " + str(ex))
+            print_stderr(f"Error: {str(ex)}")
             return SHUTDOWN_EXIT_CODE_ERROR
 
     def __thrift_timeout(self, args: argparse.Namespace) -> float:
-        if args.timeout == 0:
-            # Default to a 15 second timeout on the thrift call
-            return 15.0
-        else:
-            return args.timeout
+        return 15.0 if args.timeout == 0 else args.timeout
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -2083,9 +2050,9 @@ def create_parser() -> argparse.ArgumentParser:
         prefetch_mod.GlobCmd,
         prefetch_mod.PrefetchCmd,
         prefetch_profile_mod.PrefetchProfileCmd,
+        debug_mod.DebugCmd,
     ]
 
-    subcmd_add_list.append(debug_mod.DebugCmd)
 
     subcmd_mod.add_subcommands(parser, subcmd.commands + subcmd_add_list)
 

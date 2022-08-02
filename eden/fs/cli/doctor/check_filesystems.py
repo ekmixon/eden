@@ -165,10 +165,9 @@ def check_disk_usage(
                 "Eden lazily loads your files and needs enough disk space to "
                 "store these files when loaded."
             )
-            extra_message = instance.get_config_value(
+            if extra_message := instance.get_config_value(
                 "doctor.low-disk-space-message", ""
-            )
-            if extra_message:
+            ):
                 message = f"{message} {extra_message}"
 
             if avail <= prob_error_absolute_space_used_threshold:

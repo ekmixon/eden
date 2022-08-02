@@ -32,7 +32,7 @@ SOCKET_PATH = "socket"
 class EdenNotRunningError(Exception):
     def __init__(self, eden_dir):
         # type: (str) -> None
-        msg = "edenfs daemon does not appear to be running: tried %s" % eden_dir
+        msg = f"edenfs daemon does not appear to be running: tried {eden_dir}"
         super(EdenNotRunningError, self).__init__(msg)
         self.eden_dir = eden_dir
 
@@ -150,10 +150,7 @@ def create_thrift_client(eden_dir=None, socket_path=None, timeout=None):
     # We used to set a default timeout here, but picking the right duration is hard,
     # and safely retrying an arbitrary thrift call may not be safe.  So we
     # just leave the client with no timeout, unless one is given.
-    if timeout is None:
-        timeout_ms = None
-    else:
-        timeout_ms = timeout * 1000
+    timeout_ms = None if timeout is None else timeout * 1000
     socket.setTimeout(timeout_ms)
 
     transport = THeaderTransport(socket)

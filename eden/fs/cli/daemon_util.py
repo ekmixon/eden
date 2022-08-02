@@ -51,8 +51,5 @@ def _find_default_daemon_binary() -> Optional[str]:
 
     # This is where the binary will be found relative to this file when it is
     # run out of a CMake-based build
-    candidate = os.path.normpath(os.path.join(cli_dir, "../edenfs" + suffix))
-    if os.access(candidate, permissions):
-        return candidate
-
-    return None
+    candidate = os.path.normpath(os.path.join(cli_dir, f"../edenfs{suffix}"))
+    return candidate if os.access(candidate, permissions) else None

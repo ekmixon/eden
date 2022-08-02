@@ -188,10 +188,7 @@ def read(fp, filename):  # noqa: C901
 
 def _write_path(writer, path):
     # type: (Callable[[bytes], None], str) -> None
-    if sys.version_info[0] < 3:
-        byte_path = path
-    else:
-        byte_path = path.encode("utf-8")
+    byte_path = path if sys.version_info[0] < 3 else path.encode("utf-8")
     writer(struct.pack(">H", len(byte_path)))
     writer(byte_path)
 
@@ -201,21 +198,17 @@ def _read_path(reader, filename):
     binary_path_len = reader(2)
     if len(binary_path_len) != 2:
         raise DirstateParseException(
-            "Reached EOF while reading path length in {}.\n".format(filename)
+            f"Reached EOF while reading path length in {filename}.\n"
         )
+
 
     path_len = struct.unpack(">H", binary_path_len)[0]  # type: int
     path = reader(path_len)
     if len(path) == path_len:
-        if isinstance(path, str):
-            # Python 2.
-            return path
-        else:
-            # Python 3
-            return str(path, "utf8")
+        return path if isinstance(path, str) else str(path, "utf8")
     else:
         raise DirstateParseException(
-            "Reached EOF while reading path in {}.\n".format(filename)
+            f"Reached EOF while reading path in {filename}.\n"
         )
 
 

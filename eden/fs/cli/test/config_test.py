@@ -25,14 +25,13 @@ from ..configutil import EdenConfigParser, UnexpectedType
 
 
 def get_toml_test_file_invalid() -> str:
-    cfg_file = """
+    return """
 [core thisIsNotAllowed]
 """
-    return cfg_file
 
 
 def get_toml_test_file_defaults() -> str:
-    cfg_file = """
+    return """
 [core]
 systemIgnoreFile = "/etc/eden/gitignore"
 ignoreFile = "/home/${USER}/.gitignore"
@@ -43,11 +42,10 @@ default-revision = "master"
 [rage]
 reporter = 'pastry --title "eden rage from $(hostname)"'
 """
-    return cfg_file
 
 
 def get_toml_test_file_user_rc() -> str:
-    cfg_file = """
+    return """
 [core]
 ignoreFile = "/home/${USER}/.gitignore-override"
 edenDirectory = "/home/${USER}/.eden"
@@ -55,15 +53,13 @@ edenDirectory = "/home/${USER}/.eden"
 ["telemetry"]
 scribe-cat = "/usr/local/bin/scribe_cat"
 """
-    return cfg_file
 
 
 def get_toml_test_file_system_rc() -> str:
-    cfg_file = """
+    return """
 ["telemetry"]
 scribe-cat = "/bad/path/to/scribe_cat"
 """
-    return cfg_file
 
 
 class TomlConfigTest(EdenTestCaseBase):
@@ -225,19 +221,15 @@ experimental_systemd = true
             return
 
         self.setenv("EDEN_EXPERIMENTAL_SYSTEMD", "1")
-        self.write_user_config(
-            f"""[service]
+        self.write_user_config("""[service]
 experimental_systemd = false
-"""
-        )
+""")
         self.assertTrue(self.get_config().should_use_experimental_systemd_mode())
 
         self.setenv("EDEN_EXPERIMENTAL_SYSTEMD", "0")
-        self.write_user_config(
-            f"""[service]
+        self.write_user_config("""[service]
 experimental_systemd = true
-"""
-        )
+""")
         self.assertFalse(self.get_config().should_use_experimental_systemd_mode())
 
     def test_empty_experimental_systemd_environment_variable_does_not_override_config(
@@ -247,19 +239,15 @@ experimental_systemd = true
             return
 
         self.setenv("EDEN_EXPERIMENTAL_SYSTEMD", "")
-        self.write_user_config(
-            f"""[service]
+        self.write_user_config("""[service]
 experimental_systemd = true
-"""
-        )
+""")
         self.assertTrue(self.get_config().should_use_experimental_systemd_mode())
 
         self.setenv("EDEN_EXPERIMENTAL_SYSTEMD", "")
-        self.write_user_config(
-            f"""[service]
+        self.write_user_config("""[service]
 experimental_systemd = false
-"""
-        )
+""")
         self.assertFalse(self.get_config().should_use_experimental_systemd_mode())
 
     def test_user_id_variable_is_set_to_process_uid(self) -> None:

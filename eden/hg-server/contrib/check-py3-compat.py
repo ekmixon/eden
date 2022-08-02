@@ -35,14 +35,14 @@ def check_compat_py2(f):
     for node in ast.walk(root):
         if isinstance(node, ast.ImportFrom):
             if node.module == "__future__":
-                futures |= set(n.name for n in node.names)
+                futures |= {n.name for n in node.names}
         elif isinstance(node, ast.Print):
             haveprint = True
 
     if "absolute_import" not in futures:
-        print("%s not using absolute_import" % f)
+        print(f"{f} not using absolute_import")
     if haveprint and "print_function" not in futures:
-        print("%s requires print_function" % f)
+        print(f"{f} requires print_function")
 
 
 def check_compat_py3(f):
@@ -53,7 +53,7 @@ def check_compat_py3(f):
     try:
         ast.parse(content)
     except SyntaxError as e:
-        print("%s: invalid syntax: %s" % (f, e))
+        print(f"{f}: invalid syntax: {e}")
         return
 
     # Try to import the module.
@@ -97,11 +97,7 @@ def check_compat_py3(f):
 
 
 if __name__ == "__main__":
-    if sys.version_info[0] == 2:
-        fn = check_compat_py2
-    else:
-        fn = check_compat_py3
-
+    fn = check_compat_py2 if sys.version_info[0] == 2 else check_compat_py3
     for f in sys.argv[1:]:
         fn(f)
 

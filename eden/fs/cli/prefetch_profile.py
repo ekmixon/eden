@@ -147,23 +147,7 @@ def make_prefetch_request(
         byte_revisions = [bytes.fromhex(revision) for revision in revisions]
 
     with instance.get_thrift_client_legacy() as client:
-        if predictive:
-            predictiveParams = PredictiveFetch()
-            if predictive_num_dirs > 0:
-                predictiveParams.numTopDirectories = predictive_num_dirs
-            return client.predictiveGlobFiles(
-                GlobParams(
-                    mountPoint=bytes(checkout.path),
-                    includeDotfiles=False,
-                    prefetchFiles=enable_prefetch,
-                    suppressFileList=silent,
-                    revisions=byte_revisions,
-                    prefetchMetadata=prefetch_metadata,
-                    background=background,
-                    predictiveGlob=predictiveParams,
-                )
-            )
-        else:
+        if not predictive:
             return client.globFiles(
                 GlobParams(
                     mountPoint=bytes(checkout.path),
@@ -176,6 +160,21 @@ def make_prefetch_request(
                     background=background,
                 )
             )
+        predictiveParams = PredictiveFetch()
+        if predictive_num_dirs > 0:
+            predictiveParams.numTopDirectories = predictive_num_dirs
+        return client.predictiveGlobFiles(
+            GlobParams(
+                mountPoint=bytes(checkout.path),
+                includeDotfiles=False,
+                prefetchFiles=enable_prefetch,
+                suppressFileList=silent,
+                revisions=byte_revisions,
+                prefetchMetadata=prefetch_metadata,
+                background=background,
+                predictiveGlob=predictiveParams,
+            )
+        )
 
 
 # prefetch all of the files specified by a profile in the given checkout
@@ -245,16 +244,14 @@ def print_prefetch_results(results, print_commits) -> None:
     if not print_commits:
         columns = ["FileName"]
         data = [{"FileName": os.fsdecode(name)} for name in results.matchingFiles]
-        print(tabulate.tabulate(columns, data))
-    # Print commit and name this will make it more clean which commits
-    # files are fetched from
     else:
         columns = ["FileName", "Commit"]
         data = [
             {"FileName": os.fsdecode(name), "Commit": commit.hex()}
             for name, commit in zip(results.matchingFiles, results.originHashes)
         ]
-        print(tabulate.tabulate(columns, data))
+
+    print(tabulate.tabulate(columns, data))
 
 
 @prefetch_profile_cmd("record", "Start recording fetched file paths.")
@@ -283,11 +280,7 @@ class FinishProfileCmd(Subcmd):
         instance = get_eden_instance(args)
         with instance.get_thrift_client_legacy() as client:
             files = client.stopRecordingBackingStoreFetch()
-            output_path = (
-                args.output_path
-                if args.output_path
-                else os.path.abspath("prefetch_profile.txt")
-            )
+            output_path = args.output_path or os.path.abspath("prefetch_profile.txt")
             with open(output_path, "w") as f:
                 for path in sorted(files.fetchedFilePaths["HgQueuedBackingStore"]):
                     f.write(os.fsdecode(path))
@@ -322,7 +315,7 @@ class ListProfileCmd(Subcmd):
 
 
 def check_positive_int(value) -> int:
-    err = "Integer > 0 required (got {})".format(value)
+    err = f"Integer > 0 required (got {value})"
     try:
         int_value = int(value)
         if int_value <= 0:
@@ -394,19 +387,16 @@ class ActivateProfileCmd(Subcmd):
         instance, checkout, _rel_path = require_checkout(args, checkout)
 
         with instance.get_telemetry_logger().new_sample(
-            "prefetch_profile"
-        ) as telemetry_sample:
+                "prefetch_profile"
+            ) as telemetry_sample:
             telemetry_sample.add_string("action", "activate")
             telemetry_sample.add_string("name", args.profile_name)
             telemetry_sample.add_string("checkout", args.checkout)
             telemetry_sample.add_bool("skip_prefetch", args.skip_prefetch)
 
-            activation_result = checkout.activate_profile(
+            if activation_result := checkout.activate_profile(
                 args.profile_name, telemetry_sample
-            )
-
-            # error in activation, no point in continuing, so exit early
-            if activation_result:
+            ):
                 return activation_result
 
             if not args.skip_prefetch:
@@ -453,20 +443,17 @@ class ActivatePredictiveProfileCmd(Subcmd):
         instance, checkout, _rel_path = require_checkout(args, checkout)
 
         with instance.get_telemetry_logger().new_sample(
-            "prefetch_profile"
-        ) as telemetry_sample:
+                "prefetch_profile"
+            ) as telemetry_sample:
             telemetry_sample.add_string("action", "activate-predictive")
             telemetry_sample.add_string("checkout", args.checkout)
             telemetry_sample.add_bool("skip_prefetch", args.skip_prefetch)
             if args.num_dirs:
                 telemetry_sample.add_bool("num_dirs", args.num_dirs)
 
-            activation_result = checkout.activate_predictive_profile(
+            if activation_result := checkout.activate_predictive_profile(
                 args.num_dirs, telemetry_sample
-            )
-
-            # error in activation, no point in continuing, so exit early
-            if activation_result:
+            ):
                 return activation_result
 
             if not args.skip_prefetch:
@@ -496,10 +483,13 @@ class ActivatePredictiveProfileCmd(Subcmd):
                     # may not run
                     if args.verbose:
                         print(
-                            "Error in predictive fetch: " + str(error) + "\n"
-                            "Predictive prefetch is activated but fetch did not run. To retry, run: "
-                            "`eden prefetch-profile fetch-predictive`"
+                            (
+                                f"Error in predictive fetch: {str(error)}" + "\n"
+                                "Predictive prefetch is activated but fetch did not run. To retry, run: "
+                                "`eden prefetch-profile fetch-predictive`"
+                            )
                         )
+
             return 0
 
 
@@ -710,7 +700,7 @@ class FetchPredictiveProfileCmd(Subcmd):
             # in case of a timeout or other error sending a request to the smartplatform
             # service for predictive prefetch profiles
             if args.verbose:
-                print("Error in predictive fetch: " + str(error))
+                print(f"Error in predictive fetch: {str(error)}")
 
         return 0
 
@@ -725,9 +715,7 @@ class DisableProfileCmd(Subcmd):
         config = instance.read_local_config()
         prefetch_profiles_section = {}
         if config.has_section("prefetch-profiles"):
-            prefetch_profiles_section.update(
-                config.get_section_str_to_any("prefetch-profiles")
-            )
+            prefetch_profiles_section |= config.get_section_str_to_any("prefetch-profiles")
         prefetch_profiles_section["prefetching-enabled"] = False
         config["prefetch-profiles"] = prefetch_profiles_section
         instance.write_local_config(config)
@@ -745,9 +733,7 @@ class EnableProfileCmd(Subcmd):
         config = instance.read_local_config()
         prefetch_profiles_section = {}
         if config.has_section("prefetch-profiles"):
-            prefetch_profiles_section.update(
-                config.get_section_str_to_any("prefetch-profiles")
-            )
+            prefetch_profiles_section |= config.get_section_str_to_any("prefetch-profiles")
         prefetch_profiles_section["prefetching-enabled"] = True
         config["prefetch-profiles"] = prefetch_profiles_section
         instance.write_local_config(config)
@@ -766,9 +752,7 @@ class EnablePredictiveProfileCmd(Subcmd):
         config = instance.read_local_config()
         prefetch_profiles_section = {}
         if config.has_section("prefetch-profiles"):
-            prefetch_profiles_section.update(
-                config.get_section_str_to_any("prefetch-profiles")
-            )
+            prefetch_profiles_section |= config.get_section_str_to_any("prefetch-profiles")
         prefetch_profiles_section["predictive-prefetching-enabled"] = True
         config["prefetch-profiles"] = prefetch_profiles_section
         instance.write_local_config(config)
@@ -787,9 +771,7 @@ class DisablePredictiveProfileCmd(Subcmd):
         config = instance.read_local_config()
         prefetch_profiles_section = {}
         if config.has_section("prefetch-profiles"):
-            prefetch_profiles_section.update(
-                config.get_section_str_to_any("prefetch-profiles")
-            )
+            prefetch_profiles_section |= config.get_section_str_to_any("prefetch-profiles")
         prefetch_profiles_section["predictive-prefetching-enabled"] = False
         config["prefetch-profiles"] = prefetch_profiles_section
         instance.write_local_config(config)

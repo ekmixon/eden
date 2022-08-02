@@ -100,8 +100,9 @@ class TraceImporter(object):
         if shouldtrace("import"):
             _import = bindings.tracing.wrapfunc(
                 _import,
-                meta=lambda name: [("name", "import %s" % name), ("cat", "import")],
+                meta=lambda name: [("name", f"import {name}"), ("cat", "import")],
             )
+
 
         # importer.find_module(fullname, path=None) is defined by PEP 302.
         # Note: Python 3.4 introduced find_spec, and deprecated this API.

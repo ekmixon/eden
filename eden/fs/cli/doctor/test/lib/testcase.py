@@ -19,10 +19,7 @@ from eden.test_support.temporary_directory import TemporaryDirectoryMixin
 class DoctorTestBase(unittest.TestCase, TemporaryDirectoryMixin):
     def create_fixer(self, dry_run: bool) -> Tuple[doctor.ProblemFixer, TestOutput]:
         out = TestOutput()
-        if not dry_run:
-            fixer = doctor.ProblemFixer(out)
-        else:
-            fixer = doctor.DryRunFixer(out)
+        fixer = doctor.DryRunFixer(out) if dry_run else doctor.ProblemFixer(out)
         return fixer, out
 
     def assert_results(

@@ -82,7 +82,7 @@ _clienttelemetrydata = {}
 
 def _clienttelemetry(repo, proto, args):
     """Handle received client telemetry"""
-    logargs = {"client_%s" % key: value for key, value in args.items()}
+    logargs = {f"client_{key}": value for key, value in args.items()}
     repo.ui.log("clienttelemetry", **logargs)
     # Make them available to other extensions
     repo.clienttelemetry = logargs
@@ -107,10 +107,7 @@ def _capabilities(orig, repo, proto):
 
 
 def clienttelemetryvaluesfromconfig(ui):
-    result = {}
-    for name, value in ui.configitems("clienttelemetryvalues"):
-        result[name] = value
-    return result
+    return dict(ui.configitems("clienttelemetryvalues"))
 
 
 def _runcommand(orig, lui, repo, cmd, fullargs, ui, options, d, cmdpats, cmdoptions):
@@ -120,7 +117,7 @@ def _runcommand(orig, lui, repo, cmd, fullargs, ui, options, d, cmdpats, cmdopti
     fullcommand = dispatch._formatargs(fullargs)
     # Long invocations can occupy a lot of space in the logs.
     if len(fullcommand) > 256:
-        fullcommand = fullcommand[:256] + " (truncated)"
+        fullcommand = f"{fullcommand[:256]} (truncated)"
 
     _clienttelemetrydata["fullcommand"] = fullcommand
     return orig(lui, repo, cmd, fullargs, ui, options, d, cmdpats, cmdoptions)

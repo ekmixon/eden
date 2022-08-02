@@ -166,10 +166,7 @@ class SystemPackageFetcher(object):
     def __init__(self, build_options, packages):
         self.manager = build_options.host_type.get_package_manager()
         self.packages = packages.get(self.manager)
-        if self.packages:
-            self.installed = None
-        else:
-            self.installed = False
+        self.installed = None if self.packages else False
 
     def packages_are_installed(self):
         if self.installed is not None:
@@ -210,7 +207,7 @@ class GitFetcher(Fetcher):
         # directory name.  eg:
         # github.com/facebook/folly.git -> github.com-facebook-folly.git
         url = urlparse(repo_url)
-        directory = "%s%s" % (url.netloc, url.path)
+        directory = f"{url.netloc}{url.path}"
         for s in ["/", "\\", ":"]:
             directory = directory.replace(s, "-")
 
@@ -230,14 +227,14 @@ class GitFetcher(Fetcher):
                     data = f.read()
                     m = re.match("Subproject commit ([a-fA-F0-9]{40})", data)
                     if not m:
-                        raise Exception("Failed to parse rev from %s" % hash_file)
-                    rev = m.group(1)
-                    print("Using pinned rev %s for %s" % (rev, repo_url))
+                        raise Exception(f"Failed to parse rev from {hash_file}")
+                    rev = m[1]
+                    print(f"Using pinned rev {rev} for {repo_url}")
 
         self.rev = rev or "master"
         self.origin_repo = repo_url
         self.manifest = manifest
-        self.depth = depth if depth else GitFetcher.DEFAULT_DEPTH
+        self.depth = depth or GitFetcher.DEFAULT_DEPTH
 
     def _update(self):
         current_hash = (
@@ -261,7 +258,7 @@ class GitFetcher(Fetcher):
             # to fetch and easier to hash and verify tarball downloads.
             return ChangeStatus()
 
-        print("Updating %s -> %s" % (self.repo_dir, self.rev))
+        print(f"Updating {self.repo_dir} -> {self.rev}")
         run_cmd(["git", "fetch", "origin", self.rev], cwd=self.repo_dir)
         run_cmd(["git", "checkout", self.rev], cwd=self.repo_dir)
         run_cmd(["git", "submodule", "update", "--init"], cwd=self.repo_dir)
@@ -275,7 +272,7 @@ class GitFetcher(Fetcher):
         return ChangeStatus(True)
 
     def _clone(self):
-        print("Cloning %s..." % self.origin_repo)
+        print(f"Cloning {self.origin_repo}...")
         # The basename/dirname stuff allows us to dance around issues where
         # eg: this python process is native win32, but the git.exe is cygwin
         # or msys and doesn't like the absolute windows path that we'd otherwise
@@ -284,13 +281,14 @@ class GitFetcher(Fetcher):
             [
                 "git",
                 "clone",
-                "--depth=" + str(self.depth),
+                f"--depth={str(self.depth)}",
                 "--",
                 self.origin_repo,
                 os.path.basename(self.repo_dir),
             ],
             cwd=os.path.dirname(self.repo_dir),
         )
+
         self._update()
 
     def clean(self):
@@ -354,10 +352,10 @@ def copy_if_different(src_name, dest_name):
             if exc.errno != errno.ENOENT:
                 raise
         target = os.readlink(src_name)
-        print("Symlinking %s -> %s" % (dest_name, target))
+        print(f"Symlinking {dest_name} -> {target}")
         os.symlink(target, dest_name)
     else:
-        print("Copying %s -> %s" % (src_name, dest_name))
+        print(f"Copying {src_name} -> {dest_name}")
         shutil.copy2(src_name, dest_name)
 
     return True
@@ -396,11 +394,10 @@ class ShipitPathMap(object):
         minimized = []
 
         for r in self.roots:
-            add_this_entry = True
-            for existing in minimized:
-                if r.startswith(existing + "/"):
-                    add_this_entry = False
-                    break
+            add_this_entry = not any(
+                r.startswith(f"{existing}/") for existing in minimized
+            )
+
             if add_this_entry:
                 minimized.append(r)
 
@@ -419,7 +416,7 @@ class ShipitPathMap(object):
                 return None
 
         for src_name, dest_name in self.mapping:
-            if norm_name == src_name or norm_name.startswith(src_name + "/"):
+            if norm_name == src_name or norm_name.startswith(f"{src_name}/"):
                 rel_name = os.path.relpath(norm_name, src_name)
                 # We can have "." as a component of some paths, depending
                 # on the contents of the shipit transformation section.
@@ -433,7 +430,7 @@ class ShipitPathMap(object):
                 dest_name = os.path.normpath(dest_name)
                 return os.path.normpath(os.path.join(dest_root, dest_name, rel_name))
 
-        raise Exception("%s did not match any rules" % norm_name)
+        raise Exception(f"{norm_name} did not match any rules")
 
     def mirror(self, fbsource_root, dest_root):
         self._minimize_roots()
@@ -457,8 +454,7 @@ class ShipitPathMap(object):
                     rel_name = os.path.relpath(full_name, fbsource_root)
                     norm_name = rel_name.replace("\\", "/")
 
-                    target_name = self._map_name(norm_name, dest_root)
-                    if target_name:
+                    if target_name := self._map_name(norm_name, dest_root):
                         full_file_list.add(target_name)
                         if copy_if_different(full_name, target_name):
                             change_status.record_change(target_name)
@@ -476,7 +472,7 @@ class ShipitPathMap(object):
                 for name in f.read().decode("utf-8").splitlines():
                     name = name.strip()
                     if name not in full_file_list:
-                        print("Remove %s" % name)
+                        print(f"Remove {name}")
                         os.unlink(name)
                         change_status.record_change(name)
 
@@ -580,7 +576,7 @@ class ShipitTransformerFetcher(Fetcher):
         return os.path.exists(cls.SHIPIT)
 
     def run_shipit(self):
-        tmp_path = self.repo_dir + ".new"
+        tmp_path = f"{self.repo_dir}.new"
         try:
             if os.path.exists(tmp_path):
                 shutil.rmtree(tmp_path)
@@ -590,9 +586,9 @@ class ShipitTransformerFetcher(Fetcher):
                 [
                     "php",
                     ShipitTransformerFetcher.SHIPIT,
-                    "--project=" + self.project_name,
+                    f"--project={self.project_name}",
                     "--create-new-repo",
-                    "--source-repo-dir=" + self.build_options.fbsource_dir,
+                    f"--source-repo-dir={self.build_options.fbsource_dir}",
                     "--source-branch=.",
                     "--skip-source-init",
                     "--skip-source-pull",
@@ -600,9 +596,10 @@ class ShipitTransformerFetcher(Fetcher):
                     "--skip-push",
                     "--skip-reset",
                     "--destination-use-anonymous-https",
-                    "--create-new-repo-output-path=" + tmp_path,
+                    f"--create-new-repo-output-path={tmp_path}",
                 ]
             )
+
 
             # Remove the .git directory from the repository it generated.
             # There is no need to commit this.
@@ -625,7 +622,9 @@ class ShipitTransformerFetcher(Fetcher):
 
 
 def download_url_to_file_with_progress(url, file_name):
-    print("Download %s -> %s ..." % (url, file_name))
+    print(f"Download {url} -> {file_name} ...")
+
+
 
     class Progress(object):
         last_report = 0
@@ -642,18 +641,17 @@ def download_url_to_file_with_progress(url, file_name):
                 # status every few seconds
                 now = time.time()
                 if now - self.last_report > 5:
-                    sys.stdout.write(".. %s of %s " % (amount, total))
+                    sys.stdout.write(f".. {amount} of {total} ")
                     self.last_report = now
             sys.stdout.flush()
+
 
     progress = Progress()
     start = time.time()
     try:
         (_filename, headers) = urlretrieve(url, file_name, reporthook=progress.progress)
     except (OSError, IOError) as exc:  # noqa: B014
-        raise TransientFailure(
-            "Failed to download %s to %s: %s" % (url, file_name, str(exc))
-        )
+        raise TransientFailure(f"Failed to download {url} to {file_name}: {str(exc)}")
 
     end = time.time()
     sys.stdout.write(" [Complete in %f seconds]\n" % (end - start))
@@ -669,25 +667,23 @@ class ArchiveFetcher(Fetcher):
         self.build_options = build_options
 
         url = urlparse(self.url)
-        basename = "%s-%s" % (manifest.name, os.path.basename(url.path))
+        basename = f"{manifest.name}-{os.path.basename(url.path)}"
         self.file_name = os.path.join(build_options.scratch_dir, "downloads", basename)
         self.src_dir = os.path.join(build_options.scratch_dir, "extracted", basename)
-        self.hash_file = self.src_dir + ".hash"
+        self.hash_file = f"{self.src_dir}.hash"
 
     def _verify_hash(self):
         h = hashlib.sha256()
         with open(self.file_name, "rb") as f:
             while True:
-                block = f.read(8192)
-                if not block:
+                if block := f.read(8192):
+                    h.update(block)
+                else:
                     break
-                h.update(block)
         digest = h.hexdigest()
         if digest != self.sha256:
             os.unlink(self.file_name)
-            raise Exception(
-                "%s: expected sha256 %s but got %s" % (self.url, self.sha256, digest)
-            )
+            raise Exception(f"{self.url}: expected sha256 {self.sha256} but got {digest}")
 
     def _download_dir(self):
         """returns the download dir, creating it if it doesn't already exist"""
@@ -744,7 +740,7 @@ class ArchiveFetcher(Fetcher):
         else:
             raise Exception("don't know how to extract %s" % self.file_name)
         os.makedirs(self.src_dir)
-        print("Extract %s -> %s" % (self.file_name, self.src_dir))
+        print(f"Extract {self.file_name} -> {self.src_dir}")
         t = opener(self.file_name)
         if is_windows():
             # Ensure that we don't fall over when dealing with long paths

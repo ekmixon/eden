@@ -87,9 +87,7 @@ def zerodict():
 
 
 def roundto(x, k):
-    if x > k * 2:
-        return int(round(x / float(k)) * k)
-    return int(round(x))
+    return int(round(x / float(k)) * k) if x > k * 2 else int(round(x))
 
 
 def parsegitdiff(lines):
@@ -151,13 +149,9 @@ def analyze(ui, repo, *revs, **opts):
 
     output = opts["output"]
     if not output:
-        output = os.path.basename(root) + ".json"
+        output = f"{os.path.basename(root)}.json"
 
-    if output == "-":
-        fp = sys.stdout
-    else:
-        fp = open(output, "w")
-
+    fp = sys.stdout if output == "-" else open(output, "w")
     # Always obtain file counts of each directory in the given root directory.
     def onerror(e):
         ui.warn(_("error walking directory structure: %s\n") % e)
@@ -206,10 +200,7 @@ def analyze(ui, repo, *revs, **opts):
             tzoffset[ctx.date()[1]] += 1
             if len(pl) > 1:
                 p2distance[rev - pl[1].rev()] += 1
-            if prev == rev - 1:
-                lastctx = pctx
-            else:
-                lastctx = repo[rev - 1]
+            lastctx = pctx if prev == rev - 1 else repo[rev - 1]
             if lastctx.rev() != nullrev:
                 timedelta = ctx.date()[0] - lastctx.date()[0]
                 interarrival[roundto(timedelta, 300)] += 1

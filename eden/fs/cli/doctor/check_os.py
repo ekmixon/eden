@@ -55,12 +55,14 @@ def _os_is_bad_release(instance: EdenInstance, release: str) -> bool:
     known_bad_kernel_versions = instance.get_config_value(
         "doctor.known-bad-kernel-versions", default=""
     )
-    if not known_bad_kernel_versions:
-        return False
-    for regex in known_bad_kernel_versions.split(","):
-        if re.search(regex, release):
-            return True  # matched known bad release
-    return False  # no match to bad release
+    return (
+        any(
+            re.search(regex, release)
+            for regex in known_bad_kernel_versions.split(",")
+        )
+        if known_bad_kernel_versions
+        else False
+    )
 
 
 def run_operating_system_checks(
@@ -72,23 +74,21 @@ def run_operating_system_checks(
     # get kernel version string; same as "uname -r"
     current_kernel_release = platform.release()
 
-    # check if version too low
-    result = _os_is_kernel_version_too_old(instance, current_kernel_release)
-    if result:
+    if result := _os_is_kernel_version_too_old(
+        instance, current_kernel_release
+    ):
         tracker.add_problem(
             OSProblem(
-                # TODO: Reword these messages prior to public release
                 description=f"Kernel version {current_kernel_release} too low.",
-                remediation=f"Reboot to upgrade kernel version.",
+                remediation="Reboot to upgrade kernel version.",
             )
         )
+
         # if the kernel version is too low, return here as continuing to
         # further checks has no benefit
         return
 
-    # check against known bad versions
-    result = _os_is_bad_release(instance, current_kernel_release)
-    if result:
+    if result := _os_is_bad_release(instance, current_kernel_release):
         tracker.add_problem(
             OSProblem(
                 # TODO: Reword these messages prior to public release

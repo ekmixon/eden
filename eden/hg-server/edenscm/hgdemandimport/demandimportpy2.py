@@ -51,7 +51,7 @@ def _hgextimport(importfunc, name, globals, *args, **kwargs):
         if not globals:
             raise
         # extensions are loaded with "hgext_" prefix
-        hgextname = "hgext_%s" % name
+        hgextname = f"hgext_{name}"
         nameroot = hgextname.split(".", 1)[0]
         contextroot = globals.get("__name__", "").split(".", 1)[0]
         if nameroot != contextroot:
@@ -93,52 +93,53 @@ class _demandmod(object):
         self._data[5].add(name)
 
     def _load(self):
-        if not self._module:
-            head, globals, locals, after, level, modrefs = self._data
-            mod = _hgextimport(_origimport, head, globals, locals, None, level)
-            if mod is self:
-                # In this case, _hgextimport() above should imply
-                # _demandimport(). Otherwise, _hgextimport() never
-                # returns _demandmod. This isn't intentional behavior,
-                # in fact. (see also issue5304 for detail)
-                #
-                # If self._module is already bound at this point, self
-                # should be already _load()-ed while _hgextimport().
-                # Otherwise, there is no way to import actual module
-                # as expected, because (re-)invoking _hgextimport()
-                # should cause same result.
-                # This is reason why _load() returns without any more
-                # setup but assumes self to be already bound.
-                mod = self._module
-                assert mod and mod is not self, "%s, %s" % (self, mod)
-                return
+        if self._module:
+            return
+        head, globals, locals, after, level, modrefs = self._data
+        mod = _hgextimport(_origimport, head, globals, locals, None, level)
+        if mod is self:
+            # In this case, _hgextimport() above should imply
+            # _demandimport(). Otherwise, _hgextimport() never
+            # returns _demandmod. This isn't intentional behavior,
+            # in fact. (see also issue5304 for detail)
+            #
+            # If self._module is already bound at this point, self
+            # should be already _load()-ed while _hgextimport().
+            # Otherwise, there is no way to import actual module
+            # as expected, because (re-)invoking _hgextimport()
+            # should cause same result.
+            # This is reason why _load() returns without any more
+            # setup but assumes self to be already bound.
+            mod = self._module
+            assert mod and mod is not self, f"{self}, {mod}"
+            return
 
-            # load submodules
-            def subload(mod, p):
-                h, t = p, None
-                if "." in p:
-                    h, t = p.split(".", 1)
-                if getattr(mod, h, nothing) is nothing:
-                    setattr(mod, h, _demandmod(p, mod.__dict__, mod.__dict__, level=1))
-                elif t:
-                    subload(getattr(mod, h), t)
+        # load submodules
+        def subload(mod, p):
+            h, t = p, None
+            if "." in p:
+                h, t = p.split(".", 1)
+            if getattr(mod, h, nothing) is nothing:
+                setattr(mod, h, _demandmod(p, mod.__dict__, mod.__dict__, level=1))
+            elif t:
+                subload(getattr(mod, h), t)
 
-            for x in after:
-                subload(mod, x)
+        for x in after:
+            subload(mod, x)
 
             # Replace references to this proxy instance with the actual module.
-            if locals:
-                if locals.get(head) is self:
-                    locals[head] = mod
-                elif locals.get(head + r"mod") is self:
-                    locals[head + r"mod"] = mod
+        if locals:
+            if locals.get(head) is self:
+                locals[head] = mod
+            elif locals.get(f"{head}mod") is self:
+                locals[f"{head}mod"] = mod
 
-            for modname in modrefs:
-                modref = sys.modules.get(modname, None)
-                if modref and getattr(modref, head, None) is self:
-                    setattr(modref, head, mod)
+        for modname in modrefs:
+            modref = sys.modules.get(modname, None)
+            if modref and getattr(modref, head, None) is self:
+                setattr(modref, head, mod)
 
-            object.__setattr__(self, r"_module", mod)
+        object.__setattr__(self, r"_module", mod)
 
     def __repr__(self):
         if self._module:
@@ -146,7 +147,7 @@ class _demandmod(object):
         return "<unloaded module '%s'>" % self._data[0]
 
     def __call__(self, *args, **kwargs):
-        raise TypeError("%s object is not callable" % repr(self))
+        raise TypeError(f"{repr(self)} object is not callable")
 
     def __getattr__(self, attr):
         self._load()
@@ -217,11 +218,8 @@ def _demandimport(name, globals=None, locals=None, fromlist=None, level=-1):
                     # would do. the missing attribute will be detected later
                     # while processing the import statement.
                     return
-                mn = "%s.%s" % (mod.__name__, attr)
-                if mn in ignore:
-                    importfunc = _origimport
-                else:
-                    importfunc = _demandmod
+                mn = f"{mod.__name__}.{attr}"
+                importfunc = _origimport if mn in ignore else _demandmod
                 symbol = importfunc(attr, mod.__dict__, locals, level=1)
                 setattr(mod, attr, symbol)
 
@@ -239,9 +237,9 @@ def _demandimport(name, globals=None, locals=None, fromlist=None, level=-1):
                 if obj is nothing:
                     obj = _demandmod(comp, mod.__dict__, mod.__dict__, level=1)
                     setattr(mod, comp, obj)
-                elif mod.__name__ + "." + comp in sys.modules:
+                elif f"{mod.__name__}.{comp}" in sys.modules:
                     # prefer loaded module over attribute (issue5617)
-                    obj = sys.modules[mod.__name__ + "." + comp]
+                    obj = sys.modules[f"{mod.__name__}.{comp}"]
                 mod = obj
             return mod
 

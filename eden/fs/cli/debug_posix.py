@@ -67,10 +67,7 @@ class OverlayCmd(subcmd_mod.Subcmd):
     def run(self, args: argparse.Namespace) -> int:
         self.args = args
         if args.overlay is not None:
-            if args.path:
-                rel_path = Path(args.path)
-            else:
-                rel_path = Path()
+            rel_path = Path(args.path) if args.path else Path()
             overlay_dir = Path(args.overlay)
         else:
             path = args.path or os.getcwd()
@@ -148,10 +145,7 @@ class OverlayCmd(subcmd_mod.Subcmd):
         self, inode_number: int, path: Path, tree_data: OverlayDir
     ) -> None:
         def hex(binhash: Optional[bytes]) -> str:
-            if binhash is None:
-                return "None"
-            else:
-                return binascii.hexlify(binhash).decode("utf-8")
+            return "None" if binhash is None else binascii.hexlify(binhash).decode("utf-8")
 
         print("Inode {}: {}".format(inode_number, path))
         if not tree_data.entries:

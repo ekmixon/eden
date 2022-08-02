@@ -122,8 +122,6 @@ class ParentsCmd(Subcmd):
         return binascii.hexlify(commit).decode("utf-8")
 
     def run(self, args: argparse.Namespace) -> int:
-        null_commit_id = 20 * b"\x00"
-
         path = args.path or os.getcwd()
         _, checkout, _ = cmd_util.require_checkout(args, path)
         try:
@@ -135,10 +133,12 @@ class ParentsCmd(Subcmd):
         if args.hg:
             hg_parents, _, _ = _get_dirstate_data(checkout)
 
-            print("Mercurial p0: {}".format(self._commit_hex(hg_parents[0])))
+            print(f"Mercurial p0: {self._commit_hex(hg_parents[0])}")
+            null_commit_id = 20 * b"\x00"
+
             if hg_parents[1] != null_commit_id:
-                print("Mercurial p1: {}".format(self._commit_hex(hg_parents[1])))
-            print("EdenFS snapshot: {}".format(snapshot_hex))
+                print(f"Mercurial p1: {self._commit_hex(hg_parents[1])}")
+            print(f"EdenFS snapshot: {snapshot_hex}")
         else:
             print(snapshot_hex)
 
@@ -246,9 +246,8 @@ class ProcessFetchCmd(Subcmd):
                     if pid not in processes:
                         if not args.all_processes:
                             continue
-                        else:
-                            cmd = counts.cmdsByPid.get(pid, b"<unknown>")
-                            processes[pid] = Process(pid, cmd, mount)
+                        cmd = counts.cmdsByPid.get(pid, b"<unknown>")
+                        processes[pid] = Process(pid, cmd, mount)
 
                     processes[pid].set_fetchs(fetch_counts)
 
@@ -323,9 +322,9 @@ class BlobMetaCmd(Subcmd):
                 bytes(checkout.path), blob_id, localStoreOnly=local_only
             )
 
-        print("Blob ID: {}".format(args.id))
-        print("Size:    {}".format(info.size))
-        print("SHA1:    {}".format(hash_str(info.contentsSha1)))
+        print(f"Blob ID: {args.id}")
+        print(f"Size:    {info.size}")
+        print(f"SHA1:    {hash_str(info.contentsSha1)}")
         return 0
 
 
@@ -561,7 +560,7 @@ class MaterializedCmd(Subcmd):
             by_inode[result.inodeNumber] = result
 
         def walk(ino, path):
-            print(os.fsdecode(path if path else b"/"))
+            print(os.fsdecode(path or b"/"))
             try:
                 inode = by_inode[ino]
             except KeyError:
@@ -603,7 +602,7 @@ class FileStatsCMD(Subcmd):
         large_paths_and_sizes = [
             (path, size) for path, size in paths_and_sizes if size > 10 * MB
         ]
-        summary = {
+        return {
             "file_count": len(paths_and_sizes),
             "total_bytes": sum(size for _, size in paths_and_sizes),
             "large_file_count": len(large_paths_and_sizes),
@@ -612,8 +611,6 @@ class FileStatsCMD(Subcmd):
                 paths_and_sizes
             ),
         }
-
-        return summary
 
     @staticmethod
     def get_largest_directories_by_count(
@@ -629,7 +626,7 @@ class FileStatsCMD(Subcmd):
             for parent in Path(filepath).parents:
                 directories[str(parent)] += 1
 
-        directory_list: List[Dict[str, Union[int, str]]] = sorted(
+        return sorted(
             (
                 {"path": path, "file_count": file_count}
                 for path, file_count in directories.items()
@@ -637,8 +634,6 @@ class FileStatsCMD(Subcmd):
             ),
             key=lambda d: d["path"],
         )
-
-        return directory_list
 
     def log_files(self, name: str, files: List[Tuple[str, int]]) -> None:
 
@@ -790,11 +785,7 @@ def _print_inode_info(inode_info: TreeInodeDebugInfo, out: IO[bytes]) -> None:
     out.write(b"  Object ID:     %s\n" % hash_str(inode_info.treeHash).encode())
     out.write(b"  Entries (%d total):\n" % len(inode_info.entries))
     for entry in inode_info.entries:
-        if entry.loaded:
-            loaded_flag = "L"
-        else:
-            loaded_flag = "-"
-
+        loaded_flag = "L" if entry.loaded else "-"
         file_type_str, perms = _parse_mode(entry.mode)
         line = "    {:9} {} {:4o} {} {:40} {}\n".format(
             entry.inodeNumber,
@@ -963,18 +954,16 @@ class LogCmd(Subcmd):
 
         if args.stdout or args.upload:
             return self.upload_logs(args, instance, eden_log_path)
-        else:
-            # Display eden's log with the system pager if possible.  We could
-            # add a --tail option.
-            pager_env = os.getenv("PAGER")
-            if pager_env:
-                pager_cmd = shlex.split(pager_env)
-            else:
-                pager_cmd = ["less", "+G"]
-            pager_cmd.append(str(eden_log_path))
+        pager_cmd = (
+            shlex.split(pager_env)
+            if (pager_env := os.getenv("PAGER"))
+            else ["less", "+G"]
+        )
 
-            os.execvp(pager_cmd[0], pager_cmd)
-            raise Exception("we should never reach here")
+        pager_cmd.append(str(eden_log_path))
+
+        os.execvp(pager_cmd[0], pager_cmd)
+        raise Exception("we should never reach here")
 
 
 @debug_cmd("logging", "Display or modify logging configuration for the edenfs daemon")
@@ -1037,19 +1026,20 @@ class LoggingCmd(Subcmd):
     def print_config(self, config_str: str) -> None:
         config = json.loads(config_str)
 
-        handler_fmt = "  {:12} {:12} {}"
         separator = "  " + ("-" * 76)
 
         print("=== Log Handlers ===")
         if not config["handlers"]:
             print("  Warning: no log handlers configured!")
         else:
+            handler_fmt = "  {:12} {:12} {}"
             print(handler_fmt.format("Name", "Type", "Options"))
             print(separator)
             for name, handler in sorted(config["handlers"].items()):
                 options_str = ", ".join(
-                    sorted("{}={}".format(k, v) for k, v in handler["options"].items())
+                    sorted(f"{k}={v}" for k, v in handler["options"].items())
                 )
+
                 print(handler_fmt.format(name, handler["type"], options_str))
 
         print("\n=== Log Categories ===")
@@ -1063,7 +1053,7 @@ class LoggingCmd(Subcmd):
             # parent's level since it has no parent.
             level_str = category["level"]
             if not category["inherit"] and name != "":
-                level_str = level_str + "!"
+                level_str = f"{level_str}!"
 
             # Print the root category name as '.' instead of the empty string just
             # to help make it clear that there is a category name here.
@@ -1120,7 +1110,7 @@ class DebugJournalGetMemoryLimitCmd(Subcmd):
             except EdenError as err:
                 print(err, file=sys.stderr)
                 return 1
-            print("Journal memory limit is " + stats_print.format_size(mem))
+            print(f"Journal memory limit is {stats_print.format_size(mem)}")
             return 0
 
 
@@ -1224,9 +1214,7 @@ class DebugJournalCmd(Subcmd):
             print(err, file=sys.stderr)
             return 1
         except KeyboardInterrupt:
-            if args.follow:
-                pass
-            else:
+            if not args.follow:
                 raise
 
         return 0
@@ -1256,9 +1244,7 @@ def _print_raw_journal_deltas(
             label = labels[(info.existedBefore, info.existedAfter)]
             entries.append(f"{label} {os.fsdecode(path)}")
 
-        for path in delta.uncleanPaths:
-            entries.append(f"X {os.fsdecode(path)}")
-
+        entries.extend(f"X {os.fsdecode(path)}" for path in delta.uncleanPaths)
         # Only print journal entries if they changed paths that matched the matcher
         # or if they change the current working directory commit.
         if entries or delta.fromPosition.snapshotHash != delta.toPosition.snapshotHash:
@@ -1319,7 +1305,7 @@ class DebugThriftCmd(Subcmd):
             return 0
 
         if not args.function_name:
-            print(f"Error: no function name specified", file=sys.stderr)
+            print("Error: no function name specified", file=sys.stderr)
             print(
                 "Use the --list argument to see a list of available functions, or "
                 "specify a function name",
@@ -1379,8 +1365,9 @@ class DebugThriftCmd(Subcmd):
                 # most JSON specs. But Python's json module and jq are
                 # both fine with this deviation.
                 result_type = lookup_module_member(
-                    [EdenService, BaseService], args.function_name + "_result"
+                    [EdenService, BaseService], f"{args.function_name}_result"
                 )
+
                 json_data = Serializer.serialize(
                     TSimpleJSONProtocolFactory(), result_type(result)
                 )

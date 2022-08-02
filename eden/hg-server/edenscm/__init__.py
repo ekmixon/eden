@@ -30,10 +30,7 @@ def _fixsys():
     # Note: On Windows, the released version of hg uses python27.zip for all
     # pure Python modules including edenscm and everything in edenscmdeps.zip,
     # so not being able to locate edenscmdeps.zip is not fatal.
-    if sys.version_info[0] == 3:
-        name = "edenscmdeps3.zip"
-    else:
-        name = "edenscmdeps.zip"
+    name = "edenscmdeps3.zip" if sys.version_info[0] == 3 else "edenscmdeps.zip"
     for candidate in [libdir, os.path.join(libdir, "build")]:
         depspath = os.path.join(candidate, name)
         if os.path.exists(depspath) and depspath not in sys.path:
@@ -63,12 +60,12 @@ def run(args=None, fin=None, fout=None, ferr=None):
     if args is None:
         args = sys.argv
 
+    # chgserver code path
+
+    # no demandimport, since chgserver wants to preimport everything.
+    from .mercurial import dispatch
+
     if args[1:4] == ["serve", "--cmdserver", "chgunix2"]:
-        # chgserver code path
-
-        # no demandimport, since chgserver wants to preimport everything.
-        from .mercurial import dispatch
-
         dispatch.runchgserver()
     else:
         # non-chgserver code path
@@ -84,9 +81,5 @@ def run(args=None, fin=None, fout=None, ferr=None):
         from . import hgdemandimport
 
         hgdemandimport.enable()
-
-        # demandimport has side effect on importing dispatch.
-        # so 'import dispatch' happens after demandimport
-        from .mercurial import dispatch
 
         dispatch.run(args, fin, fout, ferr)

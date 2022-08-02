@@ -200,11 +200,13 @@ class JsonTelemetrySample(TelemetrySample):
         data: Dict[
             str,
             Union[
-                Dict[str, str], Dict[str, int], Dict[str, float], Dict[str, List[str]]
+                Dict[str, str],
+                Dict[str, int],
+                Dict[str, float],
+                Dict[str, List[str]],
             ],
-        ] = {}
-        data["int"] = self.ints
-        data["normal"] = self.strings
+        ] = {"int": self.ints, "normal": self.strings}
+
         if self.doubles:
             data["double"] = self.doubles
         if self.tags:

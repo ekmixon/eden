@@ -303,12 +303,14 @@ class EdenInstance:
                 raise
             rc_entries = []
 
-        for name in rc_entries:
-            if not name.startswith(".") and name.endswith(".toml"):
-                result.append(config_d / name)
+        result.extend(
+            config_d / name
+            for name in rc_entries
+            if not name.startswith(".") and name.endswith(".toml")
+        )
+
         result.sort()
-        result.append(self._system_config_path)
-        result.append(self._user_config_path)
+        result.extend((self._system_config_path, self._user_config_path))
         return result
 
     def get_telemetry_logger(self) -> telemetry.TelemetryLogger:
@@ -400,12 +402,11 @@ class EdenInstance:
         if env_var_value == "0":
             return False
 
-        if self._loadConfig().get_bool(
-            "service", "experimental_systemd", default=False
-        ):
-            return True
-
-        return False
+        return bool(
+            self._loadConfig().get_bool(
+                "service", "experimental_systemd", default=False
+            )
+        )
 
     def get_fallback_systemd_xdg_runtime_dir(self) -> str:
         xdg_runtime_dir = self.get_config_value(
@@ -418,9 +419,11 @@ class EdenInstance:
 
     def print_full_config(self, out: IO[bytes]) -> None:
         parser = self._loadConfig()
-        data: Dict[str, Mapping[str, str]] = {}
-        for section in parser.sections():
-            data[section] = parser.get_section_str_to_any(section)
+        data: Dict[str, Mapping[str, str]] = {
+            section: parser.get_section_str_to_any(section)
+            for section in parser.sections()
+        }
+
         out.write(toml.dumps(data).encode())
 
     def get_mount_paths(self) -> List[str]:
@@ -515,7 +518,7 @@ class EdenInstance:
         # Add all mount points listed in the config that were not reported
         # in the thrift call.
         for checkout in config_checkouts:
-            mount_info = mount_points.get(checkout.path, None)
+            mount_info = mount_points.get(checkout.path)
             if mount_info is not None:
                 if mount_info.backing_repo is None:
                     mount_info = mount_info._replace(
@@ -638,15 +641,11 @@ Do you want to run `eden mount %s` instead?"""
         """
         basename = os.path.basename(path)
         if basename == "":
-            raise Exception("Suspicious attempt to clone into: %s" % path)
+            raise Exception(f"Suspicious attempt to clone into: {path}")
 
         i = 0
         while True:
-            if i == 0:
-                dir_name = basename
-            else:
-                dir_name = f"{basename}-{i}"
-
+            dir_name = basename if i == 0 else f"{basename}-{i}"
             client_dir = clients_dir / dir_name
             try:
                 client_dir.mkdir()
@@ -712,7 +711,6 @@ Do you want to run `eden mount %s` instead?"""
                 print_stderr(
                     f"ERROR: Mount point in use! {path} is already mounted by EdenFS."
                 )
-                return 1
             else:
                 # If we are here, MOUNT/.eden/root is a symlink, but it does not
                 # point to MOUNT. This suggests `path` is a subdirectory of an
@@ -724,7 +722,7 @@ Do you want to run `eden mount %s` instead?"""
                     f"ERROR: Mount point in use! "
                     f"{path} is already mounted by EdenFS as part of {root}."
                 )
-                return 1
+            return 1
         except OSError as ex:
             # - ENOENT is expected if the mount is not mounted.
             # - We'll get ENOTCONN if the directory was not properly unmounted from a
@@ -921,7 +919,7 @@ figure out which process, please try `handle.exe` from sysinternals:
     def _add_path_to_directory_map(self, path: Path, dir_name: str) -> None:
         config_data = self._get_directory_map()
         if path in config_data:
-            raise Exception("mount path %s already exists." % path)
+            raise Exception(f"mount path {path} already exists.")
         config_data[path] = dir_name
         self._write_directory_map(config_data)
 

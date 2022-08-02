@@ -49,8 +49,7 @@ def fixcargotoml(path):
     # This is gated to the FB version so external build won't be chruned.
     if HAVE_FB:
         for line in content.splitlines(True):
-            m = versionre.match(line)
-            if m:
+            if m := versionre.match(line):
                 left, crate, right = m.groups()
                 line = '%s"%s"%s' % (left, crateversion(crate), right)
             newcontent += line
@@ -132,13 +131,13 @@ if __name__ == "__main__":
     if sys.argv[1] == "--dry-run":
 
         def write(path, content):
-            print("Need fix: %s" % path)
+            print(f"Need fix: {path}")
 
         paths = sys.argv[2:]
     else:
 
         def write(path, content):
-            print("Fixing: %s" % path)
+            print(f"Fixing: {path}")
             with open(path, "w") as f:
                 f.write(content)
 

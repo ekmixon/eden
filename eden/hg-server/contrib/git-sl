@@ -83,7 +83,7 @@ class GitRevision(object):
 
     @staticmethod
     def set_hashes(revs):
-        return set([x.hash for x in revs])
+        return {x.hash for x in revs}
 
     @classmethod
     def print_ignored_if_any(cls):
@@ -186,7 +186,7 @@ class GitRevision(object):
             # all operations are NlogN with very low const
             child_anc = GitRevision.set_hashes(child.ancestors)
             nodes = child_anc - my_ancestors_hashes
-            nodes = nodes - set([self.hash])
+            nodes = nodes - {self.hash}
             parallel_b = nodes & my_predecessors_hashes
             if len(parallel_b) == 0:
                 # if there is no one that is between me and my child, then
@@ -195,25 +195,23 @@ class GitRevision(object):
                 direct_fathers = set(get_parents(child.hash))
                 fathers = child.other_fathers
                 if child.hash != child.father.hash:
-                    fathers|= set([child.father.hash])
-                fathers|= set([self.hash])
+                    fathers |= {child.father.hash}
+                fathers |= {self.hash}
                 real_fathers = fathers & direct_fathers
                 if len(real_fathers) > 0:
                     father_hash = real_fathers.pop()
-                    child.other_fathers = fathers - set([father_hash])
+                    child.other_fathers = fathers - {father_hash}
                     child.father = GitRevision.get_rev(father_hash)
                     child.real_father = True
                 else:
                     father_hash = fathers.pop()
-                    child.other_fathers = fathers - set([father_hash])
+                    child.other_fathers = fathers - {father_hash}
                     child.father = GitRevision.get_rev(father_hash)
                     child.real_father = False
 
     def is_same_hash(self, hash_str):
         len_hash = min(len(self.hash), len(hash_str))
-        if self.hash[:len_hash] == hash_str[:len_hash]:
-            return True
-        return False
+        return self.hash[:len_hash] == hash_str[:len_hash]
 
     def eval_rev(self, revision):
         if revision.hash == self.hash:
@@ -239,8 +237,7 @@ class GitRevision(object):
 
     def tree(self):
         yield " " if self.root != self else "|"
-        for line in self.twolines_ref():
-            yield line
+        yield from self.twolines_ref()
         last = self.children[-1] if len(self.children) > 0 else None
         for child in self.children:
             if child.father is not self:
@@ -253,7 +250,7 @@ class GitRevision(object):
 
     def twolines_ref(self):
         bullet = "@  " if self.me_head else "o  "
-        text = self.small_hash + "  " + self.author
+        text = f"{self.small_hash}  {self.author}"
         if self.me_head:
             lines = bullet + ColorOutput.str("green", text)
             longref = ColorOutput.str("green", self.longref)
@@ -261,26 +258,19 @@ class GitRevision(object):
             lines = bullet + text
             longref = self.longref
         if self.ref != self.hash:
-            refv = [
-                x + "*" if x == GitRevision.current_branch else x
-                for x in self.ref
-            ]
+            refv = [f"{x}*" if x == GitRevision.current_branch else x for x in self.ref]
             text = "  (" + ", ".join(refv) + ")"
             if self.me_head:
                 lines += ColorOutput.str("yellow", text)
             else:
                 lines += ColorOutput.str("blue", text)
-        if self.real_father:
-            trace = "|  "
-        else:
-            trace = ":  "
+        trace = "|  " if self.real_father else ":  "
         if len(self.other_fathers) == 0:
             return [trace + longref, lines]
-        else:
-            other = [GitRevision.get_rev(x).small_hash for x in
-                    self.other_fathers]
-            other = ColorOutput.str("cyan", "Also son of: " + ", ".join(other))
-            return [trace + other, trace + longref, lines]
+        other = [GitRevision.get_rev(x).small_hash for x in
+                self.other_fathers]
+        other = ColorOutput.str("cyan", "Also son of: " + ", ".join(other))
+        return [trace + other, trace + longref, lines]
 
     def get_my_info(self):
         [name, longref, committime, small_hash] = get_info(self.hash)
@@ -326,7 +316,7 @@ def git_branch_names():
     out, _ = run_cmd(["branch"])
     reg = r"\*\s*(\w*)"
     GitRevision.current_branch = re.search(reg, out).groups()[0]
-    return list(set(out.split()) - set(["*", "+"]))
+    return list(set(out.split()) - {"*", "+"})
 
 def git_common_ancestor(branch1, branch2):
     out, _ = run_cmd(["merge-base", branch1, branch2], swallow_error=True)

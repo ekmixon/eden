@@ -147,9 +147,7 @@ class TerminalSettings:
                 if attr & int(attr_type):
                     start += self._attributes[attr_type]
 
-        if not start:
-            return (b"", b"")
-        return (start, self._reset)
+        return (start, self._reset) if start else (b"", b"")
 
 
 class TerminalOutput(Output):

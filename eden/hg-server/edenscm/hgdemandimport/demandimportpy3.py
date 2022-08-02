@@ -99,8 +99,7 @@ class LazyFinder(object):
 
     def find_spec(self, *args, **kwargs):
         finder = object.__getattribute__(self, "_finder")
-        find_spec = getattr(finder, "find_spec", None)
-        if find_spec:
+        if find_spec := getattr(finder, "find_spec", None):
             spec = find_spec(*args, **kwargs)
         else:
             spec = None
@@ -131,11 +130,10 @@ def isenabled():
 
 
 def enable():
-    new_finders = []
-    for finder in sys.meta_path:
-        new_finders.append(
-            LazyFinder(finder) if not isinstance(finder, LazyFinder) else finder
-        )
+    new_finders = [
+        finder if isinstance(finder, LazyFinder) else LazyFinder(finder)
+        for finder in sys.meta_path
+    ]
 
     sys.meta_path[:] = new_finders
 
